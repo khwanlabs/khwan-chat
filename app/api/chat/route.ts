@@ -65,7 +65,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(data, { status: 200 });
+    // Normalize the FieldCore field (`response`) to the UI's `reply`.
+    const d = (data ?? {}) as Record<string, unknown>;
+    return NextResponse.json(
+      { reply: d.response ?? d.reply ?? "", coherence: d.coherence, ...d },
+      { status: 200 }
+    );
   } catch (err) {
     return NextResponse.json(
       { error: "Failed to reach FieldCore API.", detail: String(err) },
