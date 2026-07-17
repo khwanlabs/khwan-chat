@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { JetBrains_Mono, IBM_Plex_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
+import LoginGate from "@/components/LoginGate";
 
 // Mono — instrument labels + all data/numbers (DESIGN.md).
 const jetbrainsMono = JetBrains_Mono({
@@ -38,7 +39,9 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${jetbrainsMono.variable} ${plexThai.variable}`}
     >
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <LoginGate>{children}</LoginGate>
+        </Providers>
       </body>
     </html>
   );
