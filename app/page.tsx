@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import {
   sendMessage,
   listSessions,
@@ -431,15 +431,15 @@ export default function Page() {
         <div className="border-t border-ink-600 px-4 py-3">
           {authStatus === "loading" ? (
             <span className="font-mono text-[11px] text-ink-400">Signing in…</span>
-          ) : userEmail ? (
+          ) : (
             <div className="flex flex-col gap-2">
               <span className="flex items-center gap-1.5">
                 <span
                   aria-hidden
                   className="h-1.5 w-1.5 shrink-0 rounded-full bg-coherence"
                 />
-                <span className="truncate font-mono text-[11px] text-ink-300" title={userEmail}>
-                  {userEmail}
+                <span className="truncate font-mono text-[11px] text-ink-300" title={userEmail ?? undefined}>
+                  {userEmail ?? "signed in"}
                 </span>
               </span>
               <button
@@ -449,28 +449,6 @@ export default function Page() {
                 Sign out
               </button>
             </div>
-          ) : (
-            // Reachable only via the dev demo bypass (the login gate blocks
-            // unauthenticated entry otherwise). Keep it small: identify the demo
-            // account and offer a real Google sign-in.
-            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-mono text-[11px] text-ink-400">
-              <span className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-caution"
-                />
-                demo account
-              </span>
-              <span aria-hidden className="text-ink-600">
-                ·
-              </span>
-              <button
-                onClick={() => signIn("google")}
-                className="text-field-bright underline decoration-ink-600 underline-offset-2 transition-colors hover:text-field-violet"
-              >
-                Sign in
-              </button>
-            </span>
           )}
         </div>
       </aside>

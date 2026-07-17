@@ -1,21 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useSession, signIn } from "next-auth/react";
-
-// Client flag key. Persisted so a reload during local dev keeps the bypass —
-// the primary path is still Google; this is only a convenience until the OAuth
-// redirect URI is registered. Cleared naturally when the tab closes.
-const DEMO_BYPASS_KEY = "fc-demo-bypass";
-
-export function readDemoBypass(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.sessionStorage.getItem(DEMO_BYPASS_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -59,31 +44,11 @@ function FieldMark({ className = "" }: { className?: string }) {
 }
 
 // Hard login gate wrapping the chat UI. Unauthenticated users must sign in with
-// Google before reaching the app — there is no silent demo fallback in the UI.
-// A small, muted dev escape ("Continue as demo (dev)") sets a client flag that
-// lets the app render via the proxy's env demo credentials while the OAuth
-// redirect URI isn't registered yet.
+// Google before reaching the app — production grade, no demo fallback.
 export default function LoginGate({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
-  // null = not yet read from sessionStorage (avoid a hydration flash / mismatch).
-  const [demoBypass, setDemoBypass] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    setDemoBypass(readDemoBypass());
-  }, []);
-
-  function enterDemo() {
-    try {
-      window.sessionStorage.setItem(DEMO_BYPASS_KEY, "1");
-    } catch {
-      // sessionStorage may be unavailable (private mode) — still allow entry
-      // for this render.
-    }
-    setDemoBypass(true);
-  }
-
-  // Resolving the session or the client flag.
-  if (status === "loading" || demoBypass === null) {
+  if (status === "loading") {
     return (
       <Centered>
         <span className="animate-pulse font-mono text-sm text-ink-400">Loading…</span>
@@ -91,12 +56,11 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // A real session always wins — the gate never shows when signed in.
-  if (status === "authenticated" || demoBypass) {
+  if (status === "authenticated") {
     return <>{children}</>;
   }
 
-  // Unauthenticated and no demo bypass → the hard gate.
+  // Unauthenticated → the hard gate.
   return (
     <Centered>
       <div className="w-full max-w-sm rounded-lg border border-ink-600 bg-ink-800 p-8">
@@ -121,17 +85,6 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
           </svg>
           Sign in with Google
         </button>
-
-        {/* Dev escape hatch — subtle, muted. Lets local dev proceed via the
-            proxy's env demo credentials before the OAuth redirect URI exists. */}
-        <div className="mt-6 text-center">
-          <button
-            onClick={enterDemo}
-            className="font-mono text-[11px] text-ink-400 underline decoration-ink-600 underline-offset-4 transition-colors hover:text-ink-300"
-          >
-            Continue as demo (dev)
-          </button>
-        </div>
       </div>
     </Centered>
   );
