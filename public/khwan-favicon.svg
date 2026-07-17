@@ -1,6 +1,6 @@
-<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="FieldCore">
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Khwan">
   <defs>
-    <linearGradient id="fcFav" x1="8" y1="7" x2="24" y2="25" gradientUnits="userSpaceOnUse">
+    <linearGradient id="kwFav" x1="8" y1="7" x2="24" y2="25" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#5B5BF0"/>
       <stop offset="1" stop-color="#9A6BF5"/>
     </linearGradient>
@@ -8,5 +8,5 @@
   <!-- single bold field ring for small sizes -->
   <ellipse cx="16" cy="16" rx="14" ry="5.5" transform="rotate(-24 16 16)" stroke="#5B5BF0" stroke-width="2"/>
   <!-- core diamond -->
-  <path d="M16 6 L26 16 L16 26 L6 16 Z" fill="url(#fcFav)"/>
+  <path d="M16 6 L26 16 L16 26 L6 16 Z" fill="url(#kwFav)"/>
 </svg>

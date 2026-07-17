@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
-  FieldCore chat — DARK app theme (parity with fieldcore-dashboard). Product apps
+  Khwan chat — DARK app theme (parity with khwan-dashboard). Product apps
   are dark: ink grounds, one indigo→violet "field" accent (brightened to
   field-bright on dark for legibility), semantic green/amber/red for state only.
   Marketing (website/docs) stays light.
@@ -28,11 +28,11 @@
   --ink-400: #6c778f;
   --ink-300: #9aa4ba;
 
-  --field-500: #5b5bf0;
-  --field-400: #7c7bf5;
-  --field-bright: #8686f7;
-  --field-violet: #9a6bf5;
-  --field-soft-dark: #191b39;
+  --iris-500: #5b5bf0;
+  --iris-400: #7c7bf5;
+  --iris-bright: #8686f7;
+  --iris-violet: #9a6bf5;
+  --iris-soft-dark: #191b39;
 
   --coherence: #1fb894;
   --caution: #d99a3e;
@@ -63,10 +63,10 @@ body {
    generates utilities for colors present in the config at startup). ——— */
 .text-on-dark { color: var(--on-dark) !important; }
 .text-on-accent { color: var(--on-accent) !important; }
-.text-field-bright { color: var(--field-bright) !important; }
-.bg-field-bright { background-color: var(--field-bright) !important; }
-.border-field-bright { border-color: var(--field-bright) !important; }
-.hover\:text-field-bright:hover { color: var(--field-bright) !important; }
+.text-iris-bright { color: var(--iris-bright) !important; }
+.bg-iris-bright { background-color: var(--iris-bright) !important; }
+.border-iris-bright { border-color: var(--iris-bright) !important; }
+.hover\:text-iris-bright:hover { color: var(--iris-bright) !important; }
 
 /* ——— Instrument scrollbars (match the dashboard) ——— */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

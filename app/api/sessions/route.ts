@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { fieldcoreEnv, forward } from "@/lib/fieldcore-server";
+import { khwanEnv, forward } from "@/lib/khwan-server";
 
-// Server-side proxy for the sessions collection. Keeps FIELDCORE_API_KEY out
+// Server-side proxy for the sessions collection. Keeps KHWAN_API_KEY out
 // of the browser (mirrors app/api/chat/route.ts).
 //   GET  /api/sessions        -> GET  /sessions        (list, newest-updated first)
 //   POST /api/sessions {title?, project_id?} -> POST /sessions {title?, project_id?} (create)
@@ -9,7 +9,7 @@ import { fieldcoreEnv, forward } from "@/lib/fieldcore-server";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const env = await fieldcoreEnv();
+  const env = await khwanEnv();
   if ("error" in env) return env.error;
   return forward(env.apiUrl, "/sessions", {
     method: "GET",
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const env = await fieldcoreEnv();
+  const env = await khwanEnv();
   if ("error" in env) return env.error;
 
   let title: unknown;

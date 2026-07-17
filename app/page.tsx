@@ -13,7 +13,7 @@ import {
   type Session,
   type Project,
   type StoredMessage,
-} from "@/lib/fieldcore";
+} from "@/lib/khwan";
 
 interface Message {
   role: "user" | "assistant";
@@ -291,9 +291,9 @@ export default function Page() {
       >
         <div className="flex items-center gap-2 border-b border-ink-600 px-4 py-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/fieldcore-mark.svg" alt="" width={24} height={24} className="shrink-0" />
+          <img src="/khwan-mark.svg" alt="" width={24} height={24} className="shrink-0" />
           <span className="text-sm font-semibold tracking-tight text-on-dark">
-            Field<span className="text-field-bright">Core</span>
+            Field<span className="text-iris-bright">Core</span>
           </span>
         </div>
 
@@ -303,7 +303,7 @@ export default function Page() {
           </span>
           <button
             onClick={startNewChat}
-            className="rounded-sm border border-field-500/60 px-2.5 py-1 text-xs font-medium text-field-bright transition-colors hover:bg-field-500 hover:text-white"
+            className="rounded-sm border border-iris-500/60 px-2.5 py-1 text-xs font-medium text-iris-bright transition-colors hover:bg-iris-500 hover:text-white"
           >
             + New chat
           </button>
@@ -342,7 +342,7 @@ export default function Page() {
                           onKeyDown={(e) => {
                             if (e.key === "Escape") setRenamingId(null);
                           }}
-                          className="w-full rounded-sm border border-field-500 bg-ink-900 px-2 py-1 text-sm text-on-dark outline-none focus:ring-1 focus:ring-field-500"
+                          className="w-full rounded-sm border border-iris-500 bg-ink-900 px-2 py-1 text-sm text-on-dark outline-none focus:ring-1 focus:ring-iris-500"
                         />
                       </form>
                     ) : confirmDeleteId === s.id ? (
@@ -369,7 +369,7 @@ export default function Page() {
                       <div
                         className={`group flex items-center gap-1 rounded-sm px-2 py-1.5 ${
                           active
-                            ? "bg-field-soft-dark"
+                            ? "bg-iris-soft-dark"
                             : "hover:bg-ink-700"
                         }`}
                       >
@@ -380,7 +380,7 @@ export default function Page() {
                           <span
                             className={`w-full truncate text-sm ${
                               active
-                                ? "font-medium text-field-bright"
+                                ? "font-medium text-iris-bright"
                                 : "text-on-dark"
                             }`}
                           >
@@ -392,7 +392,7 @@ export default function Page() {
                               ? ` · ${s.message_count} msg`
                               : ""}
                             {s.project_name?.trim() ? (
-                              <span className="text-field-bright">
+                              <span className="text-iris-bright">
                                 {" · "}
                                 {s.project_name.trim()}
                               </span>
@@ -406,7 +406,7 @@ export default function Page() {
                               setRenameValue(s.title || "");
                               setRenamingId(s.id);
                             }}
-                            className="rounded-xs px-1 py-0.5 text-[11px] text-ink-400 hover:text-field-bright"
+                            className="rounded-xs px-1 py-0.5 text-[11px] text-ink-400 hover:text-iris-bright"
                           >
                             Rename
                           </button>
@@ -444,7 +444,7 @@ export default function Page() {
               </span>
               <button
                 onClick={() => signOut()}
-                className="self-start rounded-sm border border-ink-600 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-400 transition-colors hover:border-field-violet hover:text-field-violet"
+                className="self-start rounded-sm border border-ink-600 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-400 transition-colors hover:border-iris-violet hover:text-iris-violet"
               >
                 Sign out
               </button>
@@ -470,7 +470,7 @@ export default function Page() {
             {activeProjectName && (
               <span
                 title={`Project: ${activeProjectName}`}
-                className="shrink-0 truncate font-mono text-[11px] tabular-nums text-field-bright"
+                className="shrink-0 truncate font-mono text-[11px] tabular-nums text-iris-bright"
               >
                 · {activeProjectName}
               </span>
@@ -498,7 +498,7 @@ export default function Page() {
                 <div
                   className={`max-w-[80%] rounded-md px-4 py-2.5 text-sm ${
                     m.role === "user"
-                      ? "bg-field-500 text-white"
+                      ? "bg-iris-500 text-white"
                       : "border border-ink-600 bg-ink-800 text-on-dark"
                   }`}
                 >
@@ -559,7 +559,7 @@ export default function Page() {
                   id="project-picker"
                   value={selectedProjectId}
                   onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="appearance-none rounded-sm border border-ink-600 bg-ink-800 py-1 pl-2.5 pr-7 font-mono text-xs text-on-dark outline-none focus:border-field-500 focus:ring-1 focus:ring-field-500"
+                  className="appearance-none rounded-sm border border-ink-600 bg-ink-800 py-1 pl-2.5 pr-7 font-mono text-xs text-on-dark outline-none focus:border-iris-500 focus:ring-1 focus:ring-iris-500"
                 >
                   <option value="">None</option>
                   {projects.map((p) => (
@@ -583,13 +583,13 @@ export default function Page() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message…"
-              className="flex-1 rounded-md border border-ink-600 bg-ink-800 px-4 py-2.5 text-sm text-on-dark outline-none placeholder:text-ink-400 focus:border-field-500 focus:ring-1 focus:ring-field-500"
+              className="flex-1 rounded-md border border-ink-600 bg-ink-800 px-4 py-2.5 text-sm text-on-dark outline-none placeholder:text-ink-400 focus:border-iris-500 focus:ring-1 focus:ring-iris-500"
               disabled={loading}
             />
             <button
               type="submit"
               disabled={loading || input.trim() === ""}
-              className="rounded-md bg-field-500 px-5 py-2.5 text-sm font-medium tracking-[0.01em] text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="rounded-md bg-iris-500 px-5 py-2.5 text-sm font-medium tracking-[0.01em] text-white transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               Send
             </button>

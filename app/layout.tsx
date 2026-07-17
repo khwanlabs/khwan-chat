@@ -21,10 +21,10 @@ const plexThai = IBM_Plex_Sans_Thai({
 });
 
 export const metadata: Metadata = {
-  title: "FieldCore chat",
-  description: "Chat with an agent powered by FieldCore.",
+  title: "Khwan chat",
+  description: "Chat with an agent powered by Khwan.",
   icons: {
-    icon: "/fieldcore-favicon.svg",
+    icon: "/khwan-favicon.svg",
   },
 };
 

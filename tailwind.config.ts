@@ -1,6 +1,6 @@
 import type { Config } from "tailwindcss";
 
-// FieldCore design tokens (see /Users/somboon/Desktop/FieldCore/DESIGN.md).
+// Khwan design tokens (see /Users/somboon/Desktop/Khwan/DESIGN.md).
 const config: Config = {
   content: [
     "./app/**/*.{ts,tsx}",
@@ -11,7 +11,7 @@ const config: Config = {
     extend: {
       colors: {
         // Signature "field" accent — the ONE accent.
-        field: {
+        iris: {
           400: "#7c7bf5", // accent brightened for dark grounds
           500: "#5b5bf0", // primary accent (CTA fill, active)
           bright: "#8686f7", // links / numbers / active text on dark

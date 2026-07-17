@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fieldcoreEnv } from "@/lib/fieldcore-server";
+import { khwanEnv } from "@/lib/khwan-server";
 
-// Server-side proxy to the FieldCore API. Keeps secrets out of the browser.
+// Server-side proxy to the Khwan API. Keeps secrets out of the browser.
 // The UI posts { input }; we forward it to `POST /chat` with the auth headers
 // (the signed-in user's Google Bearer when available, else the demo API key —
-// see lib/fieldcore-server.ts) and return the JSON unchanged.
+// see lib/khwan-server.ts) and return the JSON unchanged.
 //
 // To later switch to the BYOM prepare/record flow, replace the single
 // fetch below with the two-step sequence — the request/response shape the
@@ -13,7 +13,7 @@ import { fieldcoreEnv } from "@/lib/fieldcore-server";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const env = await fieldcoreEnv();
+  const env = await khwanEnv();
   if ("error" in env) return env.error;
 
   let input: unknown;
@@ -54,12 +54,12 @@ export async function POST(req: NextRequest) {
 
     if (!upstream.ok) {
       return NextResponse.json(
-        { error: "FieldCore API error.", detail: data },
+        { error: "Khwan API error.", detail: data },
         { status: upstream.status }
       );
     }
 
-    // Normalize the FieldCore field (`response`) to the UI's `reply`.
+    // Normalize the Khwan field (`response`) to the UI's `reply`.
     const d = (data ?? {}) as Record<string, unknown>;
     return NextResponse.json(
       { reply: d.response ?? d.reply ?? "", coherence: d.coherence, ...d },
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (err) {
     return NextResponse.json(
-      { error: "Failed to reach FieldCore API.", detail: String(err) },
+      { error: "Failed to reach Khwan API.", detail: String(err) },
       { status: 502 }
     );
   }

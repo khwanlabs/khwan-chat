@@ -10,7 +10,7 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-// FieldCore mark — brightened rings for the dark ground (matches the dashboard
+// Khwan mark — brightened rings for the dark ground (matches the dashboard
 // gate + the sidebar ◈ mark).
 function FieldMark({ className = "" }: { className?: string }) {
   return (
@@ -19,12 +19,12 @@ function FieldMark({ className = "" }: { className?: string }) {
       className={className}
       fill="none"
       role="img"
-      aria-label="FieldCore"
+      aria-label="Khwan"
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
         <linearGradient
-          id="fcChatGateField"
+          id="kwChatGateField"
           x1="20"
           y1="18"
           x2="44"
@@ -37,7 +37,7 @@ function FieldMark({ className = "" }: { className?: string }) {
       </defs>
       <ellipse cx="32" cy="32" rx="27" ry="10.5" transform="rotate(-24 32 32)" stroke="#7C7BF5" strokeWidth="2.2" opacity="0.9" />
       <ellipse cx="32" cy="32" rx="27" ry="10.5" transform="rotate(24 32 32)" stroke="#7C7BF5" strokeWidth="2.2" opacity="0.4" />
-      <path d="M32 19 L45 32 L32 45 L19 32 Z" fill="url(#fcChatGateField)" />
+      <path d="M32 19 L45 32 L32 45 L19 32 Z" fill="url(#kwChatGateField)" />
       <circle cx="32" cy="19" r="2.4" fill="#9A6BF5" />
     </svg>
   );
@@ -67,9 +67,9 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
         <div className="mb-6 text-center">
           <FieldMark className="mx-auto mb-3 h-11 w-11" />
           <div className="text-lg font-semibold tracking-tight text-on-dark">
-            Field<span className="text-field-bright">Core</span>
+            Field<span className="text-iris-bright">Core</span>
           </div>
-          <div className="mt-1 text-xs text-ink-400">Sign in to use FieldCore chat</div>
+          <div className="mt-1 text-xs text-ink-400">Sign in to use Khwan chat</div>
         </div>
 
         <button

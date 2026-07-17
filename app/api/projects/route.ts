@@ -1,6 +1,6 @@
-import { fieldcoreEnv, forward } from "@/lib/fieldcore-server";
+import { khwanEnv, forward } from "@/lib/khwan-server";
 
-// Server-side proxy for the projects collection. Keeps FIELDCORE_API_KEY out
+// Server-side proxy for the projects collection. Keeps KHWAN_API_KEY out
 // of the browser (mirrors app/api/sessions/route.ts).
 //   GET /api/projects -> GET /projects (list the account's projects)
 
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const env = await fieldcoreEnv();
+  const env = await khwanEnv();
   if ("error" in env) return env.error;
   return forward(env.apiUrl, "/projects", {
     method: "GET",

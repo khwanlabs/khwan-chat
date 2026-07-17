@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// Shared server-side helper for the FieldCore proxy routes. Centralizes the
+// Shared server-side helper for the Khwan proxy routes. Centralizes the
 // upstream base URL + auth headers so secrets stay out of the browser and every
 // route forwards the same way (mirrors app/api/chat/route.ts).
 //
@@ -12,10 +12,10 @@ import { authOptions } from "@/lib/auth";
 //      the token and resolves the real account + role (owner = full/mutating,
 //      invited member = read-only).
 //   2. Otherwise fall back to the server-side demo credentials
-//      (`X-API-Key` + `X-FieldCore-User`) so the app keeps working locally
+//      (`X-API-Key` + `X-Khwan-User`) so the app keeps working locally
 //      before the OAuth redirect URI is registered.
 
-export interface FieldCoreEnv {
+export interface KhwanEnv {
   apiUrl: string;
   headers: Record<string, string>;
 }
@@ -23,14 +23,14 @@ export interface FieldCoreEnv {
 // Returns the upstream base URL + auth headers, or a 500 NextResponse if the
 // server is misconfigured. Async because it reads the server session.
 // Callers should check `"error" in result`.
-export async function fieldcoreEnv(): Promise<
-  FieldCoreEnv | { error: NextResponse }
+export async function khwanEnv(): Promise<
+  KhwanEnv | { error: NextResponse }
 > {
-  const apiUrl = process.env.FIELDCORE_API_URL;
+  const apiUrl = process.env.KHWAN_API_URL;
   if (!apiUrl) {
     return {
       error: NextResponse.json(
-        { error: "Missing FIELDCORE_API_URL." },
+        { error: "Missing KHWAN_API_URL." },
         { status: 500 }
       ),
     };
@@ -53,12 +53,12 @@ export async function fieldcoreEnv(): Promise<
   }
 
   // No session — fall back to the single-key demo account.
-  const apiKey = process.env.FIELDCORE_API_KEY;
-  const userId = process.env.FIELDCORE_USER ?? "anonymous";
+  const apiKey = process.env.KHWAN_API_KEY;
+  const userId = process.env.KHWAN_USER ?? "anonymous";
   if (!apiKey) {
     return {
       error: NextResponse.json(
-        { error: "Missing FIELDCORE_API_KEY (no signed-in session)." },
+        { error: "Missing KHWAN_API_KEY (no signed-in session)." },
         { status: 500 }
       ),
     };
@@ -69,12 +69,12 @@ export async function fieldcoreEnv(): Promise<
     headers: {
       "Content-Type": "application/json",
       "X-API-Key": apiKey,
-      "X-FieldCore-User": userId,
+      "X-Khwan-User": userId,
     },
   };
 }
 
-// Forwards a request to the FieldCore API and returns its JSON response
+// Forwards a request to the Khwan API and returns its JSON response
 // unchanged (status preserved). Used by the sessions proxy routes.
 export async function forward(
   apiUrl: string,
@@ -93,7 +93,7 @@ export async function forward(
 
     if (!upstream.ok) {
       return NextResponse.json(
-        { error: "FieldCore API error.", detail: data },
+        { error: "Khwan API error.", detail: data },
         { status: upstream.status }
       );
     }
@@ -101,7 +101,7 @@ export async function forward(
     return NextResponse.json(data, { status: 200 });
   } catch (err) {
     return NextResponse.json(
-      { error: "Failed to reach FieldCore API.", detail: String(err) },
+      { error: "Failed to reach Khwan API.", detail: String(err) },
       { status: 502 }
     );
   }

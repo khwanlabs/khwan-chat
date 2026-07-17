@@ -1,5 +1,5 @@
 // Tiny client wrapper the UI uses to talk to our own API routes.
-// The routes (app/api/*) proxy to the FieldCore API so the API key stays
+// The routes (app/api/*) proxy to the Khwan API so the API key stays
 // server-side — the browser never sees a secret.
 //
 // The abstraction is intentionally thin: today it hits the simple
@@ -10,7 +10,7 @@
 export interface ChatResponse {
   // The assistant's reply text.
   reply: string;
-  // Optional cognition metadata surfaced by FieldCore (e.g. coherence).
+  // Optional cognition metadata surfaced by Khwan (e.g. coherence).
   coherence?: number;
   // The thread this reply was persisted to.
   session_id?: string;

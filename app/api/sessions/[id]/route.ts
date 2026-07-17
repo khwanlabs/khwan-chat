@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fieldcoreEnv, forward } from "@/lib/fieldcore-server";
+import { khwanEnv, forward } from "@/lib/khwan-server";
 
 // Server-side proxy for a single session.
 //   PATCH  /api/sessions/{id} {title} -> PATCH  /sessions/{id} (rename)
@@ -11,7 +11,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const env = await fieldcoreEnv();
+  const env = await khwanEnv();
   if ("error" in env) return env.error;
   const { id } = await params;
 
@@ -41,7 +41,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const env = await fieldcoreEnv();
+  const env = await khwanEnv();
   if ("error" in env) return env.error;
   const { id } = await params;
 
