@@ -12,6 +12,22 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     }),
   ],
+  // App-specific cookie names so the chat (:3003) and dashboard (:3000) sessions
+  // don't collide on the shared localhost domain (ports don't isolate cookies).
+  cookies: {
+    sessionToken: {
+      name: "fc-chat.session-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: process.env.NODE_ENV === "production" },
+    },
+    callbackUrl: {
+      name: "fc-chat.callback-url",
+      options: { sameSite: "lax", path: "/", secure: process.env.NODE_ENV === "production" },
+    },
+    csrfToken: {
+      name: "fc-chat.csrf-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: process.env.NODE_ENV === "production" },
+    },
+  },
   callbacks: {
     async jwt({ token, account }) {
       if (account?.id_token) token.id_token = account.id_token;
