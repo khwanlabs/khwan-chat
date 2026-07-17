@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fieldcoreEnv } from "@/lib/fieldcore-server";
 
-// Server-side proxy to the FieldCore API. Keeps FIELDCORE_API_KEY out of
-// the browser. The UI posts { input }; we forward it to `POST /chat` with
-// the auth + end-user headers and return the JSON unchanged.
+// Server-side proxy to the FieldCore API. Keeps secrets out of the browser.
+// The UI posts { input }; we forward it to `POST /chat` with the auth headers
+// (the signed-in user's Google Bearer when available, else the demo API key —
+// see lib/fieldcore-server.ts) and return the JSON unchanged.
 //
 // To later switch to the BYOM prepare/record flow, replace the single
 // fetch below with the two-step sequence — the request/response shape the
@@ -11,23 +13,15 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.FIELDCORE_API_KEY;
-  const apiUrl = process.env.FIELDCORE_API_URL;
-  // The signed-in end-user id. In a real app this comes from the session;
-  // here we read it from env as a single-user default.
-  const userId = process.env.FIELDCORE_USER ?? "anonymous";
-
-  if (!apiKey || !apiUrl) {
-    return NextResponse.json(
-      { error: "Missing FIELDCORE_API_KEY or FIELDCORE_API_URL." },
-      { status: 500 }
-    );
-  }
+  const env = await fieldcoreEnv();
+  if ("error" in env) return env.error;
 
   let input: unknown;
+  let sessionId: unknown;
   try {
     const body = await req.json();
     input = body?.input;
+    sessionId = body?.session_id;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
@@ -40,14 +34,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const upstream = await fetch(`${apiUrl.replace(/\/$/, "")}/chat`, {
+    const upstream = await fetch(`${env.apiUrl}/chat`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey,
-        "X-FieldCore-User": userId,
-      },
-      body: JSON.stringify({ input }),
+      headers: env.headers,
+      body: JSON.stringify(
+        typeof sessionId === "string" && sessionId
+          ? { input, session_id: sessionId }
+          : { input }
+      ),
     });
 
     const text = await upstream.text();
