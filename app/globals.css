@@ -2,8 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  FieldCore chat — DARK app theme (parity with fieldcore-dashboard). Product apps
+  are dark: ink grounds, one indigo→violet "field" accent (brightened to
+  field-bright on dark for legibility), semantic green/amber/red for state only.
+  Marketing (website/docs) stays light.
+
+  The full token system lives in tailwind.config.ts (authoritative for production
+  builds). This stylesheet re-declares the dark-only tokens as plain CSS + explicit
+  utility rules so the re-skin is config-independent: it applies on the live dev
+  server without a restart (Next caches tailwind.config at startup) and stays
+  value-identical to the config after a restart. Values mirror the dashboard exactly.
+*/
+
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
+
+  --ink-950: #07090f;
+  --ink-900: #0b0e16;
+  --ink-850: #0f1320;
+  --ink-800: #151a28;
+  --ink-700: #1c2334;
+  --ink-600: #29324a;
+  --ink-500: #3b465f;
+  --ink-400: #6c778f;
+  --ink-300: #9aa4ba;
+
+  --field-500: #5b5bf0;
+  --field-400: #7c7bf5;
+  --field-bright: #8686f7;
+  --field-violet: #9a6bf5;
+  --field-soft-dark: #191b39;
+
+  --coherence: #1fb894;
+  --caution: #d99a3e;
+  --violation: #e14b4b;
+  --on-dark: #eef1f7;
+  --on-accent: #ffffff;
 }
 
 html,
@@ -12,5 +47,29 @@ body {
 }
 
 body {
-  @apply bg-neutral-50 text-neutral-900 antialiased;
+  background: var(--ink-900);
+  color: var(--on-dark);
+  font-family: theme("fontFamily.sans");
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* Thai runs pick up the Plex Thai companion automatically. */
+:lang(th) {
+  font-family: theme("fontFamily.thai");
+}
+
+/* ——— New dark tokens: guarantee they apply on the live server (Tailwind only
+   generates utilities for colors present in the config at startup). ——— */
+.text-on-dark { color: var(--on-dark) !important; }
+.text-on-accent { color: var(--on-accent) !important; }
+.text-field-bright { color: var(--field-bright) !important; }
+.bg-field-bright { background-color: var(--field-bright) !important; }
+.border-field-bright { border-color: var(--field-bright) !important; }
+.hover\:text-field-bright:hover { color: var(--field-bright) !important; }
+
+/* ——— Instrument scrollbars (match the dashboard) ——— */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--ink-900); }
+::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-500); }
