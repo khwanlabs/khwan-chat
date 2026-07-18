@@ -10,9 +10,10 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Khwan mark — brightened rings for the dark ground (matches the dashboard
-// gate + the sidebar ◈ mark).
-function FieldMark({ className = "" }: { className?: string }) {
+// Khwan essence mark — a luminous core inside concentric breath rings with a
+// radial aura, blooming indigo→violet→orchid→rose. Matches public/khwan-mark.svg
+// and the dashboard gate. Gradient ids are unique to this component.
+function EssenceMark({ className = "" }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 64 64"
@@ -23,22 +24,34 @@ function FieldMark({ className = "" }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
+        <radialGradient id="kwChatGateAura" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="#f0d0ff" stopOpacity="0.95" />
+          <stop offset="0.35" stopColor="#c77dff" stopOpacity="0.45" />
+          <stop offset="0.7" stopColor="#7c7bf5" stopOpacity="0.18" />
+          <stop offset="1" stopColor="#5b5bf0" stopOpacity="0" />
+        </radialGradient>
         <linearGradient
-          id="kwChatGateField"
-          x1="20"
-          y1="18"
-          x2="44"
-          y2="46"
+          id="kwChatGateRing"
+          x1="12"
+          y1="12"
+          x2="52"
+          y2="52"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0" stopColor="#5B5BF0" />
-          <stop offset="1" stopColor="#9A6BF5" />
+          <stop offset="0" stopColor="#7c7bf5" />
+          <stop offset="0.55" stopColor="#c77dff" />
+          <stop offset="1" stopColor="#e26fa8" />
         </linearGradient>
       </defs>
-      <ellipse cx="32" cy="32" rx="27" ry="10.5" transform="rotate(-24 32 32)" stroke="#7C7BF5" strokeWidth="2.2" opacity="0.9" />
-      <ellipse cx="32" cy="32" rx="27" ry="10.5" transform="rotate(24 32 32)" stroke="#7C7BF5" strokeWidth="2.2" opacity="0.4" />
-      <path d="M32 19 L45 32 L32 45 L19 32 Z" fill="url(#kwChatGateField)" />
-      <circle cx="32" cy="19" r="2.4" fill="#9A6BF5" />
+      {/* essence aura */}
+      <circle cx="32" cy="32" r="30" fill="url(#kwChatGateAura)" />
+      {/* concentric breath / iris aperture */}
+      <circle cx="32" cy="32" r="20" fill="none" stroke="#7c7bf5" strokeWidth="1.1" opacity="0.4" />
+      <circle cx="32" cy="32" r="15.5" fill="none" stroke="#9a6bf5" strokeWidth="1.3" opacity="0.6" />
+      <circle cx="32" cy="32" r="11" fill="none" stroke="url(#kwChatGateRing)" strokeWidth="1.6" opacity="0.85" />
+      <circle cx="32" cy="32" r="6.5" fill="none" stroke="#e26fa8" strokeWidth="1.8" />
+      {/* luminous essence core */}
+      <circle cx="32" cy="32" r="3" fill="#f0d0ff" />
     </svg>
   );
 }
@@ -65,7 +78,7 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
     <Centered>
       <div className="w-full max-w-sm rounded-lg border border-ink-600 bg-ink-800 p-8">
         <div className="mb-6 text-center">
-          <FieldMark className="mx-auto mb-3 h-11 w-11" />
+          <EssenceMark className="mx-auto mb-3 h-11 w-11" />
           <div className="text-lg font-semibold tracking-tight text-on-dark">
             Field<span className="text-iris-bright">Core</span>
           </div>

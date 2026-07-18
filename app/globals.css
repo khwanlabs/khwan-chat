@@ -4,7 +4,7 @@
 
 /*
   Khwan chat — DARK app theme (parity with khwan-dashboard). Product apps
-  are dark: ink grounds, one indigo→violet "field" accent (brightened to
+  are dark: ink grounds, one indigo→violet "iris" accent (brightened to
   iris-bright on dark for legibility), semantic green/amber/red for state only.
   Marketing (website/docs) stays light.
 
@@ -33,6 +33,11 @@
   --iris-bright: #8686f7;
   --iris-violet: #9a6bf5;
   --iris-soft-dark: #191b39;
+
+  /* essence-* are GLOW-ONLY (mark aura/rings) — not functional UI tokens */
+  --essence-orchid: #c77dff;
+  --essence-rose: #e26fa8;
+  --essence-core: #f0d0ff;
 
   --coherence: #1fb894;
   --caution: #d99a3e;
