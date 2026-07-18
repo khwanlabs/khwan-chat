@@ -1,5 +1,5 @@
 {
-  "name": "fieldcore-chat",
+  "name": "khwan-chat",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "geist": "^1.7.2",
     "next": "14.2.5",
+    "next-auth": "^4.24.14",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
