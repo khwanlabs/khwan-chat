@@ -292,8 +292,8 @@ export default function Page() {
         <div className="flex items-center gap-2 border-b border-ink-600 px-4 py-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/khwan-mark.svg" alt="" width={24} height={24} className="shrink-0" />
-          <span className="text-sm font-semibold tracking-tight text-on-dark">
-            Field<span className="text-iris-bright">Core</span>
+          <span className="font-mono text-sm font-medium uppercase tracking-wide text-on-dark">
+            KHW<span className="text-iris-bright">A</span>N
           </span>
         </div>
 

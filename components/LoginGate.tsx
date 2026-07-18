@@ -79,8 +79,8 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
       <div className="w-full max-w-sm rounded-lg border border-ink-600 bg-ink-800 p-8">
         <div className="mb-6 text-center">
           <EssenceMark className="mx-auto mb-3 h-11 w-11" />
-          <div className="text-lg font-semibold tracking-tight text-on-dark">
-            Field<span className="text-iris-bright">Core</span>
+          <div className="font-mono text-lg font-medium uppercase tracking-wide text-on-dark">
+            KHW<span className="text-iris-bright">A</span>N
           </div>
           <div className="mt-1 text-xs text-ink-400">Sign in to use Khwan chat</div>
         </div>
