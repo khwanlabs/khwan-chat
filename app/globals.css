@@ -3,47 +3,12 @@
 @tailwind utilities;
 
 /*
-  Khwan chat — DARK app theme (parity with khwan-dashboard). Product apps
-  are dark: ink grounds, one indigo→violet "iris" accent (brightened to
-  iris-bright on dark for legibility), semantic green/amber/red for state only.
-  Marketing (website/docs) stays light.
-
-  The full token system lives in tailwind.config.ts (authoritative for production
-  builds). This stylesheet re-declares the dark-only tokens as plain CSS + explicit
-  utility rules so the re-skin is config-independent: it applies on the live dev
-  server without a restart (Next caches tailwind.config at startup) and stays
-  value-identical to the config after a restart. Values mirror the dashboard exactly.
+  Neutral sample theme. Slate/zinc palette, system font, light + dark via the
+  OS color-scheme preference. No product branding.
 */
 
 :root {
-  color-scheme: dark;
-
-  --ink-950: #07090f;
-  --ink-900: #0b0e16;
-  --ink-850: #0f1320;
-  --ink-800: #151a28;
-  --ink-700: #1c2334;
-  --ink-600: #29324a;
-  --ink-500: #3b465f;
-  --ink-400: #6c778f;
-  --ink-300: #9aa4ba;
-
-  --iris-500: #5b5bf0;
-  --iris-400: #7c7bf5;
-  --iris-bright: #8686f7;
-  --iris-violet: #9a6bf5;
-  --iris-soft-dark: #191b39;
-
-  /* essence-* are GLOW-ONLY (mark aura/rings) — not functional UI tokens */
-  --essence-orchid: #c77dff;
-  --essence-rose: #e26fa8;
-  --essence-core: #f0d0ff;
-
-  --coherence: #1fb894;
-  --caution: #d99a3e;
-  --violation: #e14b4b;
-  --on-dark: #eef1f7;
-  --on-accent: #ffffff;
+  color-scheme: light dark;
 }
 
 html,
@@ -52,29 +17,23 @@ body {
 }
 
 body {
-  background: var(--ink-900);
-  color: var(--on-dark);
   font-family: theme("fontFamily.sans");
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Thai runs pick up the Plex Thai companion automatically. */
-:lang(th) {
-  font-family: theme("fontFamily.thai");
+/* Slim, neutral scrollbars. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-
-/* ——— New dark tokens: guarantee they apply on the live server (Tailwind only
-   generates utilities for colors present in the config at startup). ——— */
-.text-on-dark { color: var(--on-dark) !important; }
-.text-on-accent { color: var(--on-accent) !important; }
-.text-iris-bright { color: var(--iris-bright) !important; }
-.bg-iris-bright { background-color: var(--iris-bright) !important; }
-.border-iris-bright { border-color: var(--iris-bright) !important; }
-.hover\:text-iris-bright:hover { color: var(--iris-bright) !important; }
-
-/* ——— Instrument scrollbars (match the dashboard) ——— */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--ink-900); }
-::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: var(--ink-500); }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184 / 0.6);
+}
