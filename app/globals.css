@@ -5,7 +5,7 @@
 /*
   Khwan chat — DARK app theme (parity with khwan-dashboard). Product apps
   are dark: ink grounds, one indigo→violet "field" accent (brightened to
-  field-bright on dark for legibility), semantic green/amber/red for state only.
+  iris-bright on dark for legibility), semantic green/amber/red for state only.
   Marketing (website/docs) stays light.
 
   The full token system lives in tailwind.config.ts (authoritative for production
