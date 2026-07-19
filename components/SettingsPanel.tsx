@@ -96,7 +96,7 @@ export default function SettingsPanel({
         </Field>
 
         <Field
-          label="Core (แกน)"
+          label="Core"
           hint="Optional — leave blank for the default core"
         >
           <div className="flex gap-2">

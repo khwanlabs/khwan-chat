@@ -5,7 +5,7 @@ export interface Settings {
   apiKey: string;
   baseUrl: string;
   userId: string;
-  /** Optional isolated core (แกน) slug. Empty ⇒ the account's default core. */
+  /** Optional isolated core slug. Empty ⇒ the account's default core. */
   core: string;
 }
 
