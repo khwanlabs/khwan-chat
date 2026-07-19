@@ -1,7 +1,8 @@
 {
-  "name": "khwan-chat",
+  "name": "khwan-chat-sample",
   "version": "0.1.0",
   "private": true,
+  "description": "A minimal, unbranded chat app built on the @khwan/client TypeScript library.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,9 +10,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "geist": "^1.7.2",
+    "@khwan/client": "file:../khwan-client-ts",
     "next": "14.2.5",
-    "next-auth": "^4.24.14",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
