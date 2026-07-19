@@ -2,12 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { makeClient } from "@/lib/client";
+import { generate } from "@/lib/openai";
 import type { Settings } from "@/lib/settings";
 
 interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   coherence?: number | null;
+  /** Number of memory sources Khwan drew on for this turn. */
+  sources?: number;
+  /** True when the coherence gate blocked the turn (this is the reason). */
+  blocked?: boolean;
 }
 
 export default function ChatPanel({
@@ -41,10 +46,47 @@ export default function ChatPanel({
 
     try {
       const client = makeClient(settings);
-      const reply = await client.chat(text);
+
+      // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
+      const turn = await client.prepare(text);
+
+      // 2. Coherence gate: if the turn isn't allowed, surface the reason + stop.
+      if (!turn.allowed) {
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            text:
+              turn.reason ??
+              "Khwan's coherence gate blocked this turn (no reason given).",
+            blocked: true,
+          },
+        ]);
+        return;
+      }
+
+      // 3. Call your own model directly with the messages Khwan prepared.
+      const answer = await generate(
+        {
+          apiKey: settings.openaiKey,
+          model: settings.openaiModel,
+          baseUrl: settings.openaiBaseUrl,
+        },
+        turn.messages,
+      );
+
+      // 4. Hand the answer back so Khwan can persist + learn.
+      await client.record(turn, answer);
+
+      // 5. Render the answer, with the memory made visible (coherence + sources).
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: reply.text, coherence: reply.coherence },
+        {
+          role: "assistant",
+          text: answer,
+          coherence: turn.coherence,
+          sources: turn.sources.length,
+        },
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -135,9 +177,32 @@ export default function ChatPanel({
 
 function Bubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
+
+  // A blocked turn: the coherence gate rejected it before any model was called.
+  if (message.blocked) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+          <span className="mb-0.5 block text-xs font-semibold uppercase tracking-wide opacity-70">
+            Blocked by coherence gate
+          </span>
+          {message.text}
+        </div>
+      </div>
+    );
+  }
+
+  const meta: string[] = [];
+  if (message.coherence !== null && message.coherence !== undefined) {
+    meta.push(`coherence ${message.coherence.toFixed(2)}`);
+  }
+  if (message.sources !== undefined) {
+    meta.push(`${message.sources} source${message.sources === 1 ? "" : "s"}`);
+  }
+
   return (
     <div className={isUser ? "flex justify-end" : "flex justify-start"}>
-      <div className={isUser ? "max-w-[85%]" : "max-w-[85%]"}>
+      <div className="max-w-[85%]">
         <div
           className={
             isUser
@@ -147,13 +212,11 @@ function Bubble({ message }: { message: ChatMessage }) {
         >
           {message.text || "(empty response)"}
         </div>
-        {!isUser &&
-          message.coherence !== null &&
-          message.coherence !== undefined && (
-            <p className="mt-1 pl-1 text-xs text-slate-400 dark:text-slate-500">
-              coherence {message.coherence.toFixed(2)}
-            </p>
-          )}
+        {!isUser && meta.length > 0 && (
+          <p className="mt-1 pl-1 text-xs text-slate-400 dark:text-slate-500">
+            {meta.join(" · ")}
+          </p>
+        )}
       </div>
     </div>
   );
