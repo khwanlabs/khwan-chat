@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Khwan } from "@khwan/client";
 import {
   DEFAULT_BASE_URL,
+  DEFAULT_OPENAI_BASE_URL,
+  DEFAULT_OPENAI_MODEL,
   isConfigured,
   type Settings,
 } from "@/lib/settings";
@@ -55,13 +57,17 @@ export default function SettingsPanel({
 
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <h1 className="text-lg font-semibold">Connect to Khwan</h1>
+      <h1 className="text-lg font-semibold">Connect</h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Your details are stored only in this browser (localStorage) and sent
-        straight to the API. Nothing is uploaded to a server of ours.
+        Khwan builds the context; your model (below) generates the reply — Khwan
+        never sees your model key. Everything is stored only in this browser
+        (localStorage). Nothing is uploaded to a server of ours.
       </p>
 
-      <div className="mt-5 space-y-4">
+      <h2 className="mt-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
+        Khwan · memory layer
+      </h2>
+      <div className="mt-3 space-y-4">
         <Field label="API key" hint="Starts with kwk_">
           <input
             type="password"
@@ -139,6 +145,51 @@ export default function SettingsPanel({
               Could not load cores: {coresError}
             </p>
           )}
+        </Field>
+      </div>
+
+      <h2 className="mt-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
+        Your model · generation
+      </h2>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        Used only for the direct browser → OpenAI call. This key is never sent
+        to Khwan.
+      </p>
+      <div className="mt-3 space-y-4">
+        <Field label="OpenAI API key" hint="Starts with sk-">
+          <input
+            type="password"
+            autoComplete="off"
+            placeholder="sk-..."
+            value={settings.openaiKey}
+            onChange={(e) => set("openaiKey", e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field label="Model">
+          <input
+            type="text"
+            autoComplete="off"
+            placeholder={DEFAULT_OPENAI_MODEL}
+            value={settings.openaiModel}
+            onChange={(e) => set("openaiModel", e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field
+          label="OpenAI base URL"
+          hint="Any OpenAI-compatible endpoint"
+        >
+          <input
+            type="text"
+            inputMode="url"
+            placeholder={DEFAULT_OPENAI_BASE_URL}
+            value={settings.openaiBaseUrl}
+            onChange={(e) => set("openaiBaseUrl", e.target.value)}
+            className={inputClass}
+          />
         </Field>
       </div>
 
