@@ -12,6 +12,8 @@ interface ChatMessage {
   /** The provider + model that generated this answer (for the loop breakdown). */
   provider?: string;
   model?: string;
+  /** "khwan" = the memory loop; "naive" = the no-Khwan full-history baseline. */
+  mode?: "khwan" | "naive";
   /** True when the coherence gate blocked the turn (this is the reason). */
   blocked?: boolean;
 }
@@ -28,6 +30,8 @@ interface StreamEvent {
   reason?: string;
   error?: string;
   answer?: string;
+  mode?: "khwan" | "naive";
+  naive?: boolean;
 }
 
 type StepStatus = "pending" | "active" | "done";
@@ -41,6 +45,8 @@ interface LoopSteps {
   sources?: number;
   provider?: string;
   modelName?: string;
+  /** Naive baseline (Khwan OFF) — only the model step runs. */
+  naive?: boolean;
 }
 
 export default function ChatPanel({ status }: { status: PublicConfig }) {
@@ -57,6 +63,11 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
   // committing a new value clears the chat so the brain switch is obvious.
   const [user, setUser] = useState(status.userId ?? "");
   const [userDraft, setUserDraft] = useState(status.userId ?? "");
+
+  // Khwan ON (the memory loop) vs OFF (naive baseline: the full conversation is
+  // resent every turn, with no memory). Toggle it to feel the difference —
+  // Khwan remembers across turns; the raw model forgets.
+  const [khwanOn, setKhwanOn] = useState(true);
 
   // Distinct users we've actually talked to (a turn succeeded) — each is a real
   // sub-brain. Shown as quick-switch chips so you can see who's been used (and,
@@ -115,11 +126,9 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
     setError(null);
     setMessages((m) => [...m, { role: "user", text }]);
     setThinking(true);
-    const live: LoopSteps = {
-      prepare: "active",
-      model: "pending",
-      record: "pending",
-    };
+    const live: LoopSteps = khwanOn
+      ? { prepare: "active", model: "pending", record: "pending" }
+      : { prepare: "done", model: "active", record: "done", naive: true };
     setSteps({ ...live });
 
     try {
@@ -127,7 +136,7 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, userId: user }),
+        body: JSON.stringify({ message: text, userId: user, khwan: khwanOn }),
       });
 
       // Errors before the stream opens (e.g. 503/400) come back as plain JSON.
@@ -155,7 +164,7 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
             live.modelName = ev.model;
           } else if (ev.status === "done") {
             live.model = "done";
-            live.record = "active";
+            if (!live.naive) live.record = "active";
           }
         } else if (ev.step === "record") {
           live.record = ev.status === "done" ? "done" : "active";
@@ -167,6 +176,7 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
         } else if (ev.type === "error") {
           setError(ev.error ?? "Request failed.");
         } else if (ev.type === "answer") {
+          const mode = ev.mode ?? (khwanOn ? "khwan" : "naive");
           setMessages((m) => [
             ...m,
             {
@@ -176,10 +186,11 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
               sources: ev.sources,
               provider: live.provider,
               model: live.modelName,
+              mode,
             },
           ]);
-          // A turn landed for this user ⇒ its sub-brain now exists. Track it.
-          rememberUser(user);
+          // A turn landed for this user (Khwan mode) ⇒ its sub-brain exists.
+          if (mode === "khwan") rememberUser(user);
         }
         setSteps({ ...live });
       };
@@ -232,6 +243,19 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setKhwanOn((v) => !v)}
+            title="ON = the Khwan memory loop (remembers across turns). OFF = a raw, stateless model with no memory — it forgets between turns."
+            className={
+              khwanOn
+                ? "rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : "rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            }
+          >
+            Khwan {khwanOn ? "ON" : "OFF"}
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             User
           </span>
@@ -310,21 +334,25 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
             <div className="flex justify-start">
               <div className="w-full max-w-md rounded-2xl rounded-bl-sm border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
                 <p className="mb-1 px-1 font-mono text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                  prepare → your model → record
+                  {steps.naive
+                    ? "no khwan · raw model (no memory)"
+                    : "prepare → your model → record"}
                 </p>
+                {!steps.naive && (
+                  <StepRow
+                    n={1}
+                    status={steps.prepare}
+                    title="prepare"
+                    sub="Khwan builds context — memory + coherence gate. No LLM call."
+                    detail={
+                      steps.prepare === "done"
+                        ? `${steps.sources ?? 0} source${steps.sources === 1 ? "" : "s"} · coherence ${steps.coherence?.toFixed(2) ?? "—"}`
+                        : undefined
+                    }
+                  />
+                )}
                 <StepRow
-                  n={1}
-                  status={steps.prepare}
-                  title="prepare"
-                  sub="Khwan builds context — memory + coherence gate. No LLM call."
-                  detail={
-                    steps.prepare === "done"
-                      ? `${steps.sources ?? 0} source${steps.sources === 1 ? "" : "s"} · coherence ${steps.coherence?.toFixed(2) ?? "—"}`
-                      : undefined
-                  }
-                />
-                <StepRow
-                  n={2}
+                  n={steps.naive ? 1 : 2}
                   status={steps.model}
                   title="your model"
                   sub={
@@ -333,12 +361,14 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
                       : "your provider, your key. Khwan never sees it."
                   }
                 />
-                <StepRow
-                  n={3}
-                  status={steps.record}
-                  title="record"
-                  sub="Khwan persists + learns → the next prepare is sharper."
-                />
+                {!steps.naive && (
+                  <StepRow
+                    n={3}
+                    status={steps.record}
+                    title="record"
+                    sub="Khwan persists + learns → the next prepare is sharper."
+                  />
+                )}
               </div>
             </div>
           )}
@@ -484,6 +514,12 @@ function Bubble({ message }: { message: ChatMessage }) {
               </div>
             )}
           </>
+        )}
+
+        {!isUser && message.mode === "naive" && (
+          <p className="mt-1 pl-1 text-xs text-amber-600 dark:text-amber-400">
+            naive · Khwan off — raw model, no memory (forgets between turns)
+          </p>
         )}
       </div>
     </div>

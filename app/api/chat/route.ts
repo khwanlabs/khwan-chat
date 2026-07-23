@@ -41,7 +41,11 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { message?: unknown; userId?: unknown };
+  let body: {
+    message?: unknown;
+    userId?: unknown;
+    khwan?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -54,6 +58,12 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // Khwan ON (default) runs the memory loop. Khwan OFF is the naive baseline: a
+  // raw, STATELESS model call — no memory layer and no history — so it visibly
+  // forgets between turns. The on/off contrast makes "Khwan remembers vs a raw
+  // model forgets" obvious.
+  const useKhwan = body.khwan !== false;
 
   // Resolve the end-user: the browser's value wins (empty ⇒ shared brain),
   // otherwise fall back to KHWAN_USER from .env. This is what makes each user a
@@ -79,6 +89,22 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
 
       try {
+        if (!useKhwan) {
+          // Naive baseline: a raw, stateless call — just this message, no memory.
+          const naive = [{ role: "user", content: message.trim() }];
+          send({
+            step: "model",
+            status: "start",
+            provider: config.model.provider,
+            model: config.model.model,
+            naive: true,
+          });
+          const answer = await generate(config.model, naive);
+          send({ step: "model", status: "done" });
+          send({ type: "answer", mode: "naive", answer });
+          return;
+        }
+
         // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
         send({ step: "prepare", status: "start" });
         const turn = await client.prepare(message.trim());
@@ -118,6 +144,7 @@ export async function POST(req: Request) {
         // Final: the answer, with the memory made visible (coherence + sources).
         send({
           type: "answer",
+          mode: "khwan",
           answer,
           coherence: turn.coherence,
           sources: turn.sources.length,

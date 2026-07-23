@@ -115,6 +115,14 @@ so the brain switch is obvious.
 > User returns a 402 (the app shows a clear message) — reuse an existing User
 > or upgrade. Blank (shared brain) works on every plan.
 
+## Khwan on / off
+
+The header has a **Khwan ON/OFF** toggle. **ON** runs the memory loop. **OFF**
+is the honest baseline: a raw, stateless model call — no memory, no history — so
+it forgets between turns. Tell it your name with Khwan ON, ask for it again with
+Khwan OFF (it won't know), then turn Khwan back ON (it remembers). That's the
+whole point of the layer, in three messages.
+
 ## How it uses the library
 
 ```ts
