@@ -79,7 +79,7 @@ Values are read **only on the server**; none are exposed to the browser.
 | ---------------- | :------: | ----- |
 | `KHWAN_API_KEY`  | ✅       | Your Khwan key (`kwk_...`). |
 | `KHWAN_BASE_URL` | —        | Defaults to `https://api.khwan.ai`. |
-| `KHWAN_USER`     | —        | End-user id → an isolated sub-brain (paid). Blank = one shared brain. |
+| `KHWAN_USER`     | —        | Default end-user id → an isolated sub-brain (paid). Blank = one shared brain. Editable per-session from the chat header (see below). |
 | `KHWAN_CORE`     | —        | Isolated core slug. Blank = the account's default core. |
 
 **Your model · generation**
@@ -93,6 +93,22 @@ Values are read **only on the server**; none are exposed to the browser.
 | `MODEL_MAX_TOKENS` | —        | Cap on generated tokens. Defaults to `1024`. |
 
 Restart `npm run dev` after editing `.env.local`.
+
+## Per-user memory (the multi-user demo)
+
+The chat header has a **User** field. Each distinct value is an *isolated
+sub-brain* — Khwan remembers each user separately. Type `alice`, tell it your
+name, then switch to `bob`: it won't know you. Switch back to `alice` and the
+memory is still there. Leave the field blank to chat against **one shared
+brain** (the default).
+
+Under the hood the browser sends `userId` with each message; the server passes
+it to Khwan as the end-user (`X-Khwan-User`). Changing the User clears the chat
+so the brain switch is obvious.
+
+> Per-user sub-brains are a **paid** Khwan feature — on the free plan, setting a
+> User returns a 402 and the app shows a clear message. Blank (shared brain)
+> works on every plan.
 
 ## How it uses the library
 

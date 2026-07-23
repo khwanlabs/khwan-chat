@@ -29,6 +29,22 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // The end-user we're chatting as. Each distinct value is an isolated sub-brain
+  // (Khwan remembers each user separately); empty ⇒ one shared brain. Seeded
+  // from KHWAN_USER in .env. `userDraft` is the input; `user` is what we send —
+  // committing a new value clears the chat so the brain switch is obvious.
+  const [user, setUser] = useState(status.userId ?? "");
+  const [userDraft, setUserDraft] = useState(status.userId ?? "");
+
+  function commitUser() {
+    const next = userDraft.trim();
+    setUserDraft(next);
+    if (next === user) return;
+    setUser(next);
+    setMessages([]);
+    setError(null);
+  }
+
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
@@ -50,7 +66,7 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, userId: user }),
       });
       const data = (await res.json()) as ChatResponse;
 
@@ -100,28 +116,62 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
       ? `${status.provider} · ${status.model}`
       : null,
     status.core ? `core: ${status.core}` : "default core",
-    status.userId ? `user: ${status.userId}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <div className="flex h-[100dvh] flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+      <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">Khwan Chat Sample</h1>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">
             {subtitle}
           </p>
         </div>
+        <label className="flex shrink-0 items-center gap-2">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            User
+          </span>
+          <input
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={userDraft}
+            onChange={(e) => setUserDraft(e.target.value)}
+            onBlur={commitUser}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            placeholder="shared brain"
+            title="Each user gets an isolated memory. Blank = one shared brain. (Per-user needs a paid Khwan plan.)"
+            className="w-32 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:ring-slate-800"
+          />
+        </label>
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {messages.length === 0 && !thinking && (
-            <p className="mt-16 text-center text-sm text-slate-400 dark:text-slate-500">
-              Say hello to start the conversation.
-            </p>
+            <div className="mt-16 text-center">
+              <p className="text-sm text-slate-400 dark:text-slate-500">
+                Say hello to start the conversation.
+              </p>
+              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                {user ? (
+                  <>
+                    Chatting as <span className="font-medium">{user}</span> — an
+                    isolated brain. Switch the User to prove Khwan keeps each one
+                    separate.
+                  </>
+                ) : (
+                  <>Chatting against one shared brain. Set a User to give them a private memory.</>
+                )}
+              </p>
+            </div>
           )}
 
           {messages.map((m, i) => (
