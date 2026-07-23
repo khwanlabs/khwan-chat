@@ -1,11 +1,15 @@
 # Khwan Chat Sample
 
-A minimal chat built on the Khwan TypeScript client — [`@khwan/client`](https://www.npmjs.com/package/@khwan/client).
+A minimal, multi-provider chat built on the Khwan TypeScript client —
+[`@khwan/client`](https://www.npmjs.com/package/@khwan/client).
 
 Khwan is a pure **AI-memory layer** — it never runs a model. This sample shows
 how to wire Khwan's memory around **your own model**: Khwan prepares the
 context, you call your model to generate the reply, then you hand the reply back
 so Khwan can persist and learn from it.
+
+Everything is configured through a **`.env` file** — there is no settings popup
+and no login. Clone it, fill in `.env.local`, pick your provider, run.
 
 ## The loop
 
@@ -17,82 +21,90 @@ prepare  →  your model  →  record
    (memory + constitution + coherence). **No LLM call happens here.**
 2. If `turn.allowed === false`, the coherence gate blocked the turn — show
    `turn.reason` and stop.
-3. Call your own model with `turn.messages`. This sample posts them directly
-   from the browser to an OpenAI-compatible `/chat/completions` endpoint with
-   **your** OpenAI key, and takes `choices[0].message.content` as the answer.
+3. Call your own model with `turn.messages`.
 4. `await client.record(turn, answer)` — Khwan persists the exchange and learns.
-5. Render the answer. The sample also surfaces `turn.coherence` and how many
-   `turn.sources` were used, so the "memory" is visible.
+5. Render the answer, plus `turn.coherence` and how many `turn.sources` Khwan
+   used, so the "memory" is visible.
 
-Your model key is used **only** for the browser → OpenAI call. It is never sent
-to Khwan; Khwan never sees your model or its key.
+In this sample the whole loop runs **server-side**, inside the Next.js route
+[`app/api/chat/route.ts`](app/api/chat/route.ts). That's what keeps your API
+keys in `.env` and out of the browser: the browser only ever sends the user's
+message and receives the answer.
 
-## What it demonstrates
+## Bring your own model — multiple providers
 
-- Creating a client — `new Khwan({ apiKey, userId, baseUrl, core })`
-- The full memory loop — `client.prepare(input)` → your model → `client.record(turn, answer)`
-- Bringing your own model — a direct browser call to any OpenAI-compatible
-  endpoint, with your own key, model, and base URL
-- Selecting an isolated **core** with the `core` option — either by typing a
-  slug or by loading the account's cores with `client.cores()` into a dropdown
-- Making memory visible — showing the `coherence` score and the number of
-  `sources` Khwan drew on for each turn
+Set `MODEL_PROVIDER` to one of three families. The provider adapter translates
+Khwan's prepared messages into each API's shape.
 
-Everything runs client-side. There is no server, no login, and no database —
-just React state, `localStorage`, and the client library.
+| `MODEL_PROVIDER` | Vendor           | Example `MODEL_NAME`      | Default endpoint |
+| ---------------- | ---------------- | ------------------------- | ---------------- |
+| `openai`         | OpenAI           | `gpt-4o-mini`             | `https://api.openai.com/v1` |
+| `anthropic`      | Anthropic Claude | `claude-3-5-haiku-latest` | `https://api.anthropic.com` |
+| `google`         | Google Gemini    | `gemini-1.5-flash`        | `https://generativelanguage.googleapis.com` |
+
+**Anything OpenAI-compatible** works through `MODEL_PROVIDER=openai` plus a
+`MODEL_BASE_URL` — Groq, OpenRouter, DeepSeek, Together, Mistral, xAI (Grok),
+Ollama, LM Studio, vLLM, and more. The full cheat-sheet of base URLs and model
+names is in [`.env.example`](.env.example).
+
+Adding a fourth provider is one file: implement the `Provider` interface in
+[`lib/providers/`](lib/providers) and register it in
+[`lib/providers/index.ts`](lib/providers/index.ts).
 
 ## Prerequisites
 
 - Node.js 18+
-- A Khwan API key (see [Getting an API key](#getting-an-api-key))
-- An OpenAI (or OpenAI-compatible) API key for your own model
+- A Khwan API key (from the Khwan dashboard — starts with `kwk_`)
+- An API key for whichever model provider you choose
 
 ## Run it
 
 ```bash
 npm install
+cp .env.example .env.local   # then edit .env.local
 npm run dev
 ```
 
-Open http://localhost:3000, then open the settings panel and enter:
+Open http://localhost:3000. If anything required is missing, the app tells you
+exactly which variables to set.
+
+## Configuration (`.env.local`)
+
+All configuration is environment variables — copy `.env.example` and fill it in.
+Values are read **only on the server**; none are exposed to the browser.
 
 **Khwan · memory layer**
 
-| Field    | What to enter                                          |
-| -------- | ------------------------------------------------------ |
-| API key  | Your Khwan API key (starts with `kwk_`)                |
-| Base URL | The Khwan API base URL (defaults to `https://api.khwan.ai`) |
-| User ID  | Any string that identifies the end user                |
-| Core     | Optional slug of an isolated core; blank = default     |
+| Variable         | Required | Notes |
+| ---------------- | :------: | ----- |
+| `KHWAN_API_KEY`  | ✅       | Your Khwan key (`kwk_...`). |
+| `KHWAN_BASE_URL` | —        | Defaults to `https://api.khwan.ai`. |
+| `KHWAN_USER`     | —        | End-user id → an isolated sub-brain (paid). Blank = one shared brain. |
+| `KHWAN_CORE`     | —        | Isolated core slug. Blank = the account's default core. |
 
 **Your model · generation**
 
-| Field           | What to enter                                            |
-| --------------- | -------------------------------------------------------- |
-| OpenAI API key  | Your model key (starts with `sk-`)                       |
-| Model           | Model name (defaults to `gpt-4o-mini`)                   |
-| OpenAI base URL | OpenAI-compatible endpoint (defaults to `https://api.openai.com/v1`) |
+| Variable           | Required | Notes |
+| ------------------ | :------: | ----- |
+| `MODEL_PROVIDER`   | ✅       | `openai` \| `anthropic` \| `google`. |
+| `MODEL_API_KEY`    | ✅       | The provider's key. |
+| `MODEL_NAME`       | ✅       | Model name, e.g. `gpt-4o-mini`. |
+| `MODEL_BASE_URL`   | —        | Override the endpoint (e.g. to hit an OpenAI-compatible host). |
+| `MODEL_MAX_TOKENS` | —        | Cap on generated tokens. Defaults to `1024`. |
 
-These values are saved in your browser's `localStorage`. The Khwan values are
-sent to the Khwan API; the model key is sent only to the OpenAI endpoint.
-Nothing is written to a file or uploaded to a server of ours.
-
-## Getting an API key
-
-Create an account and generate an API key from the Khwan dashboard, then paste
-the `kwk_...` key into the settings panel. Bring your own OpenAI-compatible key
-for the model.
+Restart `npm run dev` after editing `.env.local`.
 
 ## How it uses the library
 
 ```ts
 import { Khwan } from "@khwan/client";
+import { generate } from "@/lib/providers"; // provider adapter (openai | anthropic | google)
 
 const client = new Khwan({
-  apiKey: "kwk_...",
-  userId: "alice",
-  baseUrl: "https://api.khwan.ai",
-  core: "client1", // optional — omit for the account's default core
+  apiKey: process.env.KHWAN_API_KEY!,
+  baseUrl: process.env.KHWAN_BASE_URL,
+  userId: process.env.KHWAN_USER || undefined,
+  core: process.env.KHWAN_CORE || undefined,
 });
 
 // 1. Khwan builds the context — no model runs here.
@@ -101,27 +113,24 @@ const turn = await client.prepare("hello");
 // 2. Coherence gate.
 if (!turn.allowed) throw new Error(turn.reason ?? "blocked");
 
-// 3. Call YOUR model with the prepared messages.
-const res = await fetch("https://api.openai.com/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${OPENAI_KEY}`,
-  },
-  body: JSON.stringify({ model: "gpt-4o-mini", messages: turn.messages }),
-});
-const answer = (await res.json()).choices[0].message.content;
+// 3. Call YOUR model with the prepared messages, via the configured provider.
+const answer = await generate(modelConfig, turn.messages);
 
 // 4. Hand the answer back so Khwan persists + learns.
 await client.record(turn, answer);
-
-// List the isolated cores available on the account:
-const cores = await client.cores();
 ```
 
-See [`lib/client.ts`](lib/client.ts), [`lib/openai.ts`](lib/openai.ts),
-[`components/SettingsPanel.tsx`](components/SettingsPanel.tsx), and
-[`components/ChatPanel.tsx`](components/ChatPanel.tsx) for the full wiring.
+See [`app/api/chat/route.ts`](app/api/chat/route.ts),
+[`lib/config.ts`](lib/config.ts), and [`lib/providers/`](lib/providers) for the
+full wiring.
+
+## Security notes
+
+- API keys live in `.env` and are read only in server code (`lib/config.ts`
+  imports `server-only`). They are never bundled into the client.
+- The browser talks only to this app's `/api/chat` route — never directly to
+  Khwan or your model provider.
+- Your model key is never sent to Khwan; Khwan never sees your model.
 
 ## The client dependency
 
@@ -139,4 +148,4 @@ npm install @khwan/client
 
 ## Stack
 
-Next.js (App Router) + React + Tailwind CSS + TypeScript.
+Next.js (App Router, Node runtime) + React + Tailwind CSS + TypeScript.
