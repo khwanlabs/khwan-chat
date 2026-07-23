@@ -9,6 +9,9 @@ interface ChatMessage {
   coherence?: number | null;
   /** Number of memory sources Khwan drew on for this turn. */
   sources?: number;
+  /** The provider + model that generated this answer (for the loop breakdown). */
+  provider?: string;
+  model?: string;
   /** True when the coherence gate blocked the turn (this is the reason). */
   blocked?: boolean;
 }
@@ -171,6 +174,8 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
               text: ev.answer ?? "",
               coherence: ev.coherence,
               sources: ev.sources,
+              provider: live.provider,
+              model: live.modelName,
             },
           ]);
           // A turn landed for this user ⇒ its sub-brain now exists. Track it.
@@ -395,6 +400,7 @@ function UserChip({
 }
 
 function Bubble({ message }: { message: ChatMessage }) {
+  const [expanded, setExpanded] = useState(false);
   const isUser = message.role === "user";
 
   // A blocked turn: the coherence gate rejected it before any model was called.
@@ -411,6 +417,8 @@ function Bubble({ message }: { message: ChatMessage }) {
     );
   }
 
+  // Assistant answers carry the loop's telemetry — show it collapsed, expandable
+  // into the full prepare → your model → record breakdown for that turn.
   const meta: string[] = [];
   if (message.coherence !== null && message.coherence !== undefined) {
     meta.push(`coherence ${message.coherence.toFixed(2)}`);
@@ -418,6 +426,7 @@ function Bubble({ message }: { message: ChatMessage }) {
   if (message.sources !== undefined) {
     meta.push(`${message.sources} source${message.sources === 1 ? "" : "s"}`);
   }
+  const hasLoop = !isUser && message.sources !== undefined;
 
   return (
     <div className={isUser ? "flex justify-end" : "flex justify-start"}>
@@ -431,10 +440,50 @@ function Bubble({ message }: { message: ChatMessage }) {
         >
           {message.text || "(empty response)"}
         </div>
-        {!isUser && meta.length > 0 && (
-          <p className="mt-1 pl-1 text-xs text-slate-400 dark:text-slate-500">
-            {meta.join(" · ")}
-          </p>
+
+        {hasLoop && (
+          <>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              className="mt-1 flex items-center gap-1 pl-1 text-xs text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+            >
+              <span className="text-[9px]">{expanded ? "▾" : "▸"}</span>
+              {meta.length > 0 ? meta.join(" · ") : "how this turn worked"}
+            </button>
+
+            {expanded && (
+              <div className="mt-1.5 w-full max-w-md rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="mb-1 px-1 font-mono text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  prepare → your model → record
+                </p>
+                <StepRow
+                  n={1}
+                  status="done"
+                  title="prepare"
+                  sub="Khwan builds context — memory + coherence gate. No LLM call."
+                  detail={`${message.sources ?? 0} source${message.sources === 1 ? "" : "s"} · coherence ${message.coherence?.toFixed(2) ?? "—"} — no LLM call`}
+                />
+                <StepRow
+                  n={2}
+                  status="done"
+                  title="your model"
+                  sub={
+                    message.provider
+                      ? `${message.provider} · ${message.model} — your provider, your key`
+                      : "your provider, your key. Khwan never sees it."
+                  }
+                />
+                <StepRow
+                  n={3}
+                  status="done"
+                  title="record"
+                  sub="Khwan persisted + learned → the next prepare is sharper."
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
