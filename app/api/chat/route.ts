@@ -98,8 +98,9 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error:
-              "Per-user memory (isolated sub-brains) needs a paid Khwan plan. " +
-              "Clear the User field to chat against one shared brain.",
+              "Per-user memory limit reached for this plan. Reuse an existing " +
+              "User, upgrade for more end-users, or clear the User field to " +
+              "chat against one shared brain.",
           },
           { status: 402 },
         );

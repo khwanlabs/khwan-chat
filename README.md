@@ -106,9 +106,10 @@ Under the hood the browser sends `userId` with each message; the server passes
 it to Khwan as the end-user (`X-Khwan-User`). Changing the User clears the chat
 so the brain switch is obvious.
 
-> Per-user sub-brains are a **paid** Khwan feature — on the free plan, setting a
-> User returns a 402 and the app shows a clear message. Blank (shared brain)
-> works on every plan.
+> The free plan includes a few per-user sub-brains so you can try this out;
+> paid plans lift the cap. When you exceed the plan's limit, adding a **new**
+> User returns a 402 (the app shows a clear message) — reuse an existing User
+> or upgrade. Blank (shared brain) works on every plan.
 
 ## How it uses the library
 
