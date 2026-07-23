@@ -13,19 +13,38 @@ interface ChatMessage {
   blocked?: boolean;
 }
 
-interface ChatResponse {
-  answer?: string;
+/** One newline-delimited JSON event from POST /api/chat. */
+interface StreamEvent {
+  step?: "prepare" | "model" | "record";
+  status?: "start" | "done" | "blocked";
+  type?: "answer" | "blocked" | "error";
   coherence?: number | null;
   sources?: number;
-  blocked?: boolean;
+  provider?: string;
+  model?: string;
   reason?: string;
   error?: string;
+  answer?: string;
+}
+
+type StepStatus = "pending" | "active" | "done";
+
+/** Live state of the three-step loop, shown while a turn is in flight. */
+interface LoopSteps {
+  prepare: StepStatus;
+  model: StepStatus;
+  record: StepStatus;
+  coherence?: number | null;
+  sources?: number;
+  provider?: string;
+  modelName?: string;
 }
 
 export default function ChatPanel({ status }: { status: PublicConfig }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [steps, setSteps] = useState<LoopSteps | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -93,49 +112,92 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
     setError(null);
     setMessages((m) => [...m, { role: "user", text }]);
     setThinking(true);
+    const live: LoopSteps = {
+      prepare: "active",
+      model: "pending",
+      record: "pending",
+    };
+    setSteps({ ...live });
 
     try {
-      // The whole loop (prepare → your model → record) runs on the server.
+      // The whole loop runs on the server and streams each step back to us.
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, userId: user }),
       });
-      const data = (await res.json()) as ChatResponse;
 
-      if (!res.ok) {
+      // Errors before the stream opens (e.g. 503/400) come back as plain JSON.
+      if (!res.ok || !res.body) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
         throw new Error(data.error ?? `Request failed (HTTP ${res.status}).`);
       }
 
-      if (data.blocked) {
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
-            text:
-              data.reason ??
-              "Khwan's coherence gate blocked this turn (no reason given).",
-            blocked: true,
-          },
-        ]);
-        return;
-      }
+      const apply = (ev: StreamEvent) => {
+        if (ev.step === "prepare") {
+          if (ev.status === "done") {
+            live.prepare = "done";
+            live.coherence = ev.coherence;
+            live.sources = ev.sources;
+            live.model = "active";
+          } else if (ev.status === "blocked") {
+            live.prepare = "done";
+          }
+        } else if (ev.step === "model") {
+          if (ev.status === "start") {
+            live.model = "active";
+            live.provider = ev.provider;
+            live.modelName = ev.model;
+          } else if (ev.status === "done") {
+            live.model = "done";
+            live.record = "active";
+          }
+        } else if (ev.step === "record") {
+          live.record = ev.status === "done" ? "done" : "active";
+        } else if (ev.type === "blocked") {
+          setMessages((m) => [
+            ...m,
+            { role: "assistant", text: ev.reason ?? "Blocked.", blocked: true },
+          ]);
+        } else if (ev.type === "error") {
+          setError(ev.error ?? "Request failed.");
+        } else if (ev.type === "answer") {
+          setMessages((m) => [
+            ...m,
+            {
+              role: "assistant",
+              text: ev.answer ?? "",
+              coherence: ev.coherence,
+              sources: ev.sources,
+            },
+          ]);
+          // A turn landed for this user ⇒ its sub-brain now exists. Track it.
+          rememberUser(user);
+        }
+        setSteps({ ...live });
+      };
 
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: data.answer ?? "",
-          coherence: data.coherence,
-          sources: data.sources,
-        },
-      ]);
-      // A turn landed for this user ⇒ its sub-brain now exists. Track it.
-      rememberUser(user);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (line) apply(JSON.parse(line) as StreamEvent);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setThinking(false);
+      setSteps(null);
     }
   }
 
@@ -239,12 +301,39 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
             <Bubble key={i} message={m} />
           ))}
 
-          {thinking && (
+          {steps && (
             <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-2.5 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                <span className="inline-flex gap-1">
-                  <Dot /> <Dot delay="150ms" /> <Dot delay="300ms" />
-                </span>
+              <div className="w-full max-w-md rounded-2xl rounded-bl-sm border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="mb-1 px-1 font-mono text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  prepare → your model → record
+                </p>
+                <StepRow
+                  n={1}
+                  status={steps.prepare}
+                  title="prepare"
+                  sub="Khwan builds context — memory + coherence gate. No LLM call."
+                  detail={
+                    steps.prepare === "done"
+                      ? `${steps.sources ?? 0} source${steps.sources === 1 ? "" : "s"} · coherence ${steps.coherence?.toFixed(2) ?? "—"}`
+                      : undefined
+                  }
+                />
+                <StepRow
+                  n={2}
+                  status={steps.model}
+                  title="your model"
+                  sub={
+                    steps.provider
+                      ? `${steps.provider} · ${steps.modelName} — your provider, your key`
+                      : "your provider, your key. Khwan never sees it."
+                  }
+                />
+                <StepRow
+                  n={3}
+                  status={steps.record}
+                  title="record"
+                  sub="Khwan persists + learns → the next prepare is sharper."
+                />
               </div>
             </div>
           )}
@@ -352,11 +441,59 @@ function Bubble({ message }: { message: ChatMessage }) {
   );
 }
 
-function Dot({ delay = "0ms" }: { delay?: string }) {
+function StepRow({
+  n,
+  status,
+  title,
+  sub,
+  detail,
+}: {
+  n: number;
+  status: StepStatus;
+  title: string;
+  sub: string;
+  detail?: string;
+}) {
+  const dim = status === "pending";
   return (
-    <span
-      className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-current"
-      style={{ animationDelay: delay }}
-    />
+    <div className="flex items-start gap-2.5 px-1 py-1.5">
+      <StepIcon status={status} n={n} />
+      <div className="min-w-0 flex-1">
+        <p
+          className={
+            dim
+              ? "text-xs font-medium text-slate-400 dark:text-slate-600"
+              : "text-xs font-medium text-slate-800 dark:text-slate-100"
+          }
+        >
+          {title}
+        </p>
+        <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+          {detail ?? sub}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function StepIcon({ status, n }: { status: StepStatus; n: number }) {
+  if (status === "done") {
+    return (
+      <span className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">
+        ✓
+      </span>
+    );
+  }
+  if (status === "active") {
+    return (
+      <span className="mt-0.5 flex h-4 w-4 flex-none animate-pulse items-center justify-center rounded-full bg-slate-800 text-[10px] font-semibold text-white dark:bg-white dark:text-slate-900">
+        {n}
+      </span>
+    );
+  }
+  return (
+    <span className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full border border-slate-300 text-[10px] font-semibold text-slate-400 dark:border-slate-700 dark:text-slate-600">
+      {n}
+    </span>
   );
 }

@@ -31,6 +31,10 @@ In this sample the whole loop runs **server-side**, inside the Next.js route
 keys in `.env` and out of the browser: the browser only ever sends the user's
 message and receives the answer.
 
+The route **streams** each step back as newline-delimited JSON, so the UI
+animates the loop live — you watch `prepare` (Khwan, no LLM) → `your model`
+→ `record` (Khwan learns) light up in sequence on every turn.
+
 ## Bring your own model — multiple providers
 
 Set `MODEL_PROVIDER` to one of three families. The provider adapter translates

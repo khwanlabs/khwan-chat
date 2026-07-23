@@ -4,7 +4,12 @@
 //   prepare (Khwan builds context) → your model generates → record (Khwan learns)
 //
 // GET  /api/chat  → non-secret config status for the UI (no keys).
-// POST /api/chat  → { message, userId? } ⇒ { answer, coherence, sources, blocked, reason }.
+// POST /api/chat  → { message, userId? } ⇒ a stream of newline-delimited JSON
+//   events so the UI can animate the loop live:
+//     { step: "prepare", status: "start" | "done" | "blocked", coherence?, sources?, reason? }
+//     { step: "model",   status: "start" | "done", provider?, model? }
+//     { step: "record",  status: "start" | "done" }
+//     { type: "answer", answer, coherence, sources } | { type: "blocked", reason } | { type: "error", error }
 //
 // `userId` (optional) selects an ISOLATED per-user sub-brain so the demo can
 // show Khwan remembering each user separately. Omit/blank ⇒ one shared brain.
@@ -65,56 +70,84 @@ export async function POST(req: Request) {
     core: config.khwan.core,
   });
 
-  try {
-    // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
-    const turn = await client.prepare(message.trim());
+  // Stream the loop as newline-delimited JSON so the UI can show each of the
+  // three steps as it happens: prepare (Khwan) → your model → record (Khwan).
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (obj: unknown) =>
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
 
-    // 2. Coherence gate: if the turn isn't allowed, surface the reason + stop.
-    if (!turn.allowed) {
-      return NextResponse.json({
-        blocked: true,
-        reason:
-          turn.reason ??
-          "Khwan's coherence gate blocked this turn (no reason given).",
-      });
-    }
+      try {
+        // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
+        send({ step: "prepare", status: "start" });
+        const turn = await client.prepare(message.trim());
 
-    // 3. Call the configured provider directly with the prepared messages.
-    const answer = await generate(config.model, turn.messages);
+        // Coherence gate: if the turn isn't allowed, surface the reason + stop.
+        if (!turn.allowed) {
+          const reason =
+            turn.reason ??
+            "Khwan's coherence gate blocked this turn (no reason given).";
+          send({ step: "prepare", status: "blocked", reason });
+          send({ type: "blocked", reason });
+          controller.close();
+          return;
+        }
+        send({
+          step: "prepare",
+          status: "done",
+          coherence: turn.coherence,
+          sources: turn.sources.length,
+        });
 
-    // 4. Hand the answer back so Khwan can persist + learn.
-    await client.record(turn, answer);
+        // 2. Call the configured provider directly with the prepared messages.
+        send({
+          step: "model",
+          status: "start",
+          provider: config.model.provider,
+          model: config.model.model,
+        });
+        const answer = await generate(config.model, turn.messages);
+        send({ step: "model", status: "done" });
 
-    // 5. Return the answer with the memory made visible (coherence + sources).
-    return NextResponse.json({
-      answer,
-      coherence: turn.coherence,
-      sources: turn.sources.length,
-    });
-  } catch (err) {
-    // Make the per-user (paid) and bad-id cases readable in the UI.
-    if (err instanceof KhwanError) {
-      if (err.status === 402) {
-        return NextResponse.json(
-          {
-            error:
+        // 3. Hand the answer back so Khwan can persist + learn.
+        send({ step: "record", status: "start" });
+        await client.record(turn, answer);
+        send({ step: "record", status: "done" });
+
+        // Final: the answer, with the memory made visible (coherence + sources).
+        send({
+          type: "answer",
+          answer,
+          coherence: turn.coherence,
+          sources: turn.sources.length,
+        });
+      } catch (err) {
+        // Stream already opened ⇒ status is 200; report failures as an event.
+        let error = err instanceof Error ? err.message : String(err);
+        if (err instanceof KhwanError) {
+          if (err.status === 402) {
+            error =
               "Per-user memory limit reached for this plan. Reuse an existing " +
               "User, upgrade for more end-users, or clear the User field to " +
-              "chat against one shared brain.",
-          },
-          { status: 402 },
-        );
+              "chat against one shared brain.";
+          } else if (err.status === 422) {
+            error = `Invalid user id "${userId ?? ""}". Use letters, numbers, and dashes.`;
+          }
+        }
+        send({ type: "error", error });
+      } finally {
+        controller.close();
       }
-      if (err.status === 422) {
-        return NextResponse.json(
-          {
-            error: `Invalid user id "${userId ?? ""}". Use letters, numbers, and dashes.`,
-          },
-          { status: 422 },
-        );
-      }
-    }
-    const detail = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: detail }, { status: 502 });
-  }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store, no-transform",
+      // Ask any proxy (e.g. nginx) not to buffer, so steps arrive live.
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
