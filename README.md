@@ -134,17 +134,17 @@ full wiring.
 
 ## The client dependency
 
-For local development this repo points at the sibling package on disk:
+This sample depends on the published client from npm:
 
 ```json
-"@khwan/client": "file:../khwan-client-ts"
+"@khwan/client": "^0.1.0"
 ```
 
-When this sample is published on its own, switch that to the npm package:
+`npm install` pulls it for you — nothing else to wire up.
 
-```bash
-npm install @khwan/client
-```
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 ## Stack
 
