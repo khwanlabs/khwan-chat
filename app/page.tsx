@@ -1,49 +1,45 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import SettingsPanel from "@/components/SettingsPanel";
 import ChatPanel from "@/components/ChatPanel";
-import {
-  emptySettings,
-  isConfigured,
-  loadSettings,
-  saveSettings,
-  type Settings,
-} from "@/lib/settings";
+import ConfigNotice from "@/components/ConfigNotice";
+import type { PublicConfig } from "@/lib/config";
 
 export default function Page() {
-  const [settings, setSettings] = useState<Settings>(emptySettings());
-  const [ready, setReady] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [status, setStatus] = useState<PublicConfig | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Hydrate from localStorage after mount (avoids SSR/client mismatch).
+  // Ask the server (not the browser) what's configured. No secrets cross here.
   useEffect(() => {
-    const stored = loadSettings();
-    setSettings(stored);
-    setEditing(!isConfigured(stored));
-    setReady(true);
+    fetch("/api/chat")
+      .then((r) => r.json())
+      .then((s: PublicConfig) => setStatus(s))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
-  if (!ready) return null;
+  if (error) {
+    return (
+      <main className="flex min-h-[100dvh] items-center justify-center px-4">
+        <p className="text-sm text-red-600 dark:text-red-400">
+          Could not reach the server: {error}
+        </p>
+      </main>
+    );
+  }
 
-  if (editing) {
+  if (!status) return null;
+
+  if (!status.configured) {
     return (
       <main className="flex min-h-[100dvh] items-center justify-center px-4 py-10">
-        <SettingsPanel
-          settings={settings}
-          onChange={setSettings}
-          onSave={() => {
-            saveSettings(settings);
-            setEditing(false);
-          }}
-        />
+        <ConfigNotice missing={status.missing} />
       </main>
     );
   }
 
   return (
     <main>
-      <ChatPanel settings={settings} onEditSettings={() => setEditing(true)} />
+      <ChatPanel status={status} />
     </main>
   );
 }

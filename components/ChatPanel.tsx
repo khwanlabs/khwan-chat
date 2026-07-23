@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { makeClient } from "@/lib/client";
-import { generate } from "@/lib/openai";
-import type { Settings } from "@/lib/settings";
+import type { PublicConfig } from "@/lib/config";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -15,13 +13,16 @@ interface ChatMessage {
   blocked?: boolean;
 }
 
-export default function ChatPanel({
-  settings,
-  onEditSettings,
-}: {
-  settings: Settings;
-  onEditSettings: () => void;
-}) {
+interface ChatResponse {
+  answer?: string;
+  coherence?: number | null;
+  sources?: number;
+  blocked?: boolean;
+  reason?: string;
+  error?: string;
+}
+
+export default function ChatPanel({ status }: { status: PublicConfig }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -45,19 +46,25 @@ export default function ChatPanel({
     setThinking(true);
 
     try {
-      const client = makeClient(settings);
+      // The whole loop (prepare → your model → record) runs on the server.
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = (await res.json()) as ChatResponse;
 
-      // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
-      const turn = await client.prepare(text);
+      if (!res.ok) {
+        throw new Error(data.error ?? `Request failed (HTTP ${res.status}).`);
+      }
 
-      // 2. Coherence gate: if the turn isn't allowed, surface the reason + stop.
-      if (!turn.allowed) {
+      if (data.blocked) {
         setMessages((m) => [
           ...m,
           {
             role: "assistant",
             text:
-              turn.reason ??
+              data.reason ??
               "Khwan's coherence gate blocked this turn (no reason given).",
             blocked: true,
           },
@@ -65,27 +72,13 @@ export default function ChatPanel({
         return;
       }
 
-      // 3. Call your own model directly with the messages Khwan prepared.
-      const answer = await generate(
-        {
-          apiKey: settings.openaiKey,
-          model: settings.openaiModel,
-          baseUrl: settings.openaiBaseUrl,
-        },
-        turn.messages,
-      );
-
-      // 4. Hand the answer back so Khwan can persist + learn.
-      await client.record(turn, answer);
-
-      // 5. Render the answer, with the memory made visible (coherence + sources).
       setMessages((m) => [
         ...m,
         {
           role: "assistant",
-          text: answer,
-          coherence: turn.coherence,
-          sources: turn.sources.length,
+          text: data.answer ?? "",
+          coherence: data.coherence,
+          sources: data.sources,
         },
       ]);
     } catch (err) {
@@ -102,23 +95,25 @@ export default function ChatPanel({
     }
   }
 
+  const subtitle = [
+    status.provider && status.model
+      ? `${status.provider} · ${status.model}`
+      : null,
+    status.core ? `core: ${status.core}` : "default core",
+    status.userId ? `user: ${status.userId}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div className="flex h-[100dvh] flex-col">
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">Khwan Chat Sample</h1>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-            {settings.userId}
-            {settings.core ? ` · core: ${settings.core}` : " · default core"}
+            {subtitle}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onEditSettings}
-          className="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          Settings
-        </button>
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">

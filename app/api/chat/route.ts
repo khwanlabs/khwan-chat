@@ -1,0 +1,85 @@
+// The chat endpoint. This is where the whole Khwan loop runs — server-side, so
+// the API keys from `.env` never reach the browser:
+//
+//   prepare (Khwan builds context) → your model generates → record (Khwan learns)
+//
+// GET  /api/chat  → non-secret config status for the UI (no keys).
+// POST /api/chat  → { message } ⇒ { answer, coherence, sources, blocked, reason }.
+
+import { Khwan } from "@khwan/client";
+import { NextResponse } from "next/server";
+import { publicConfig, readConfig } from "@/lib/config";
+import { generate } from "@/lib/providers";
+
+// Reads env + calls out to the model provider — run on the Node.js runtime.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export function GET() {
+  return NextResponse.json(publicConfig());
+}
+
+export async function POST(req: Request) {
+  const { config, missing } = readConfig();
+  if (!config) {
+    return NextResponse.json(
+      {
+        error:
+          "Server is not configured. Set the missing variables in .env — see README.",
+        missing,
+      },
+      { status: 503 },
+    );
+  }
+
+  let message: unknown;
+  try {
+    ({ message } = await req.json());
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+  if (typeof message !== "string" || !message.trim()) {
+    return NextResponse.json(
+      { error: "Body must be { message: string }." },
+      { status: 400 },
+    );
+  }
+
+  const client = new Khwan({
+    apiKey: config.khwan.apiKey,
+    baseUrl: config.khwan.baseUrl,
+    userId: config.khwan.userId,
+    core: config.khwan.core,
+  });
+
+  try {
+    // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
+    const turn = await client.prepare(message.trim());
+
+    // 2. Coherence gate: if the turn isn't allowed, surface the reason + stop.
+    if (!turn.allowed) {
+      return NextResponse.json({
+        blocked: true,
+        reason:
+          turn.reason ??
+          "Khwan's coherence gate blocked this turn (no reason given).",
+      });
+    }
+
+    // 3. Call the configured provider directly with the prepared messages.
+    const answer = await generate(config.model, turn.messages);
+
+    // 4. Hand the answer back so Khwan can persist + learn.
+    await client.record(turn, answer);
+
+    // 5. Return the answer with the memory made visible (coherence + sources).
+    return NextResponse.json({
+      answer,
+      coherence: turn.coherence,
+      sources: turn.sources.length,
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: detail }, { status: 502 });
+  }
+}
