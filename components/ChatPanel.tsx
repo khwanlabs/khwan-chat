@@ -9,25 +9,107 @@ interface ChatMessage {
   coherence?: number | null;
   /** Number of memory sources Khwan drew on for this turn. */
   sources?: number;
+  /** The provider + model that generated this answer (for the loop breakdown). */
+  provider?: string;
+  model?: string;
+  /** "khwan" = the memory loop; "naive" = the no-Khwan full-history baseline. */
+  mode?: "khwan" | "naive";
   /** True when the coherence gate blocked the turn (this is the reason). */
   blocked?: boolean;
 }
 
-interface ChatResponse {
-  answer?: string;
+/** One newline-delimited JSON event from POST /api/chat. */
+interface StreamEvent {
+  step?: "prepare" | "model" | "record";
+  status?: "start" | "done" | "blocked";
+  type?: "answer" | "blocked" | "error";
   coherence?: number | null;
   sources?: number;
-  blocked?: boolean;
+  provider?: string;
+  model?: string;
   reason?: string;
   error?: string;
+  answer?: string;
+  mode?: "khwan" | "naive";
+  naive?: boolean;
+}
+
+type StepStatus = "pending" | "active" | "done";
+
+/** Live state of the three-step loop, shown while a turn is in flight. */
+interface LoopSteps {
+  prepare: StepStatus;
+  model: StepStatus;
+  record: StepStatus;
+  coherence?: number | null;
+  sources?: number;
+  provider?: string;
+  modelName?: string;
+  /** Naive baseline (Khwan OFF) — only the model step runs. */
+  naive?: boolean;
 }
 
 export default function ChatPanel({ status }: { status: PublicConfig }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [steps, setSteps] = useState<LoopSteps | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // The end-user we're chatting as. Each distinct value is an isolated sub-brain
+  // (Khwan remembers each user separately); empty ⇒ one shared brain. Seeded
+  // from KHWAN_USER in .env. `userDraft` is the input; `user` is what we send —
+  // committing a new value clears the chat so the brain switch is obvious.
+  const [user, setUser] = useState(status.userId ?? "");
+  const [userDraft, setUserDraft] = useState(status.userId ?? "");
+
+  // Khwan ON (the memory loop) vs OFF (naive baseline: the full conversation is
+  // resent every turn, with no memory). Toggle it to feel the difference —
+  // Khwan remembers across turns; the raw model forgets.
+  const [khwanOn, setKhwanOn] = useState(true);
+
+  // Distinct users we've actually talked to (a turn succeeded) — each is a real
+  // sub-brain. Shown as quick-switch chips so you can see who's been used (and,
+  // on the free plan, watch the 3 slots fill up). Persisted so a reload keeps them.
+  const USED_KEY = "khwan-chat:used-users";
+  const [usedUsers, setUsedUsers] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(USED_KEY);
+      if (raw) setUsedUsers(JSON.parse(raw) as string[]);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function rememberUser(name: string) {
+    if (!name) return;
+    setUsedUsers((prev) => {
+      if (prev.includes(name)) return prev;
+      const next = [...prev, name];
+      try {
+        window.localStorage.setItem(USED_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
+  // Commit the draft as the active user. A change clears the chat so the brain
+  // switch is obvious.
+  function switchTo(next: string) {
+    const name = next.trim();
+    setUserDraft(name);
+    if (name === user) return;
+    setUser(name);
+    setMessages([]);
+    setError(null);
+  }
+
+  const commitUser = () => switchTo(userDraft);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -44,47 +126,94 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
     setError(null);
     setMessages((m) => [...m, { role: "user", text }]);
     setThinking(true);
+    const live: LoopSteps = khwanOn
+      ? { prepare: "active", model: "pending", record: "pending" }
+      : { prepare: "done", model: "active", record: "done", naive: true };
+    setSteps({ ...live });
 
     try {
-      // The whole loop (prepare → your model → record) runs on the server.
+      // The whole loop runs on the server and streams each step back to us.
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, userId: user, khwan: khwanOn }),
       });
-      const data = (await res.json()) as ChatResponse;
 
-      if (!res.ok) {
+      // Errors before the stream opens (e.g. 503/400) come back as plain JSON.
+      if (!res.ok || !res.body) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
         throw new Error(data.error ?? `Request failed (HTTP ${res.status}).`);
       }
 
-      if (data.blocked) {
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
-            text:
-              data.reason ??
-              "Khwan's coherence gate blocked this turn (no reason given).",
-            blocked: true,
-          },
-        ]);
-        return;
-      }
+      const apply = (ev: StreamEvent) => {
+        if (ev.step === "prepare") {
+          if (ev.status === "done") {
+            live.prepare = "done";
+            live.coherence = ev.coherence;
+            live.sources = ev.sources;
+            live.model = "active";
+          } else if (ev.status === "blocked") {
+            live.prepare = "done";
+          }
+        } else if (ev.step === "model") {
+          if (ev.status === "start") {
+            live.model = "active";
+            live.provider = ev.provider;
+            live.modelName = ev.model;
+          } else if (ev.status === "done") {
+            live.model = "done";
+            if (!live.naive) live.record = "active";
+          }
+        } else if (ev.step === "record") {
+          live.record = ev.status === "done" ? "done" : "active";
+        } else if (ev.type === "blocked") {
+          setMessages((m) => [
+            ...m,
+            { role: "assistant", text: ev.reason ?? "Blocked.", blocked: true },
+          ]);
+        } else if (ev.type === "error") {
+          setError(ev.error ?? "Request failed.");
+        } else if (ev.type === "answer") {
+          const mode = ev.mode ?? (khwanOn ? "khwan" : "naive");
+          setMessages((m) => [
+            ...m,
+            {
+              role: "assistant",
+              text: ev.answer ?? "",
+              coherence: ev.coherence,
+              sources: ev.sources,
+              provider: live.provider,
+              model: live.modelName,
+              mode,
+            },
+          ]);
+          // A turn landed for this user (Khwan mode) ⇒ its sub-brain exists.
+          if (mode === "khwan") rememberUser(user);
+        }
+        setSteps({ ...live });
+      };
 
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: data.answer ?? "",
-          coherence: data.coherence,
-          sources: data.sources,
-        },
-      ]);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (line) apply(JSON.parse(line) as StreamEvent);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setThinking(false);
+      setSteps(null);
     }
   }
 
@@ -100,40 +229,146 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
       ? `${status.provider} · ${status.model}`
       : null,
     status.core ? `core: ${status.core}` : "default core",
-    status.userId ? `user: ${status.userId}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <div className="flex h-[100dvh] flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+      <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">Khwan Chat Sample</h1>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">
             {subtitle}
           </p>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setKhwanOn((v) => !v)}
+            title="ON = the Khwan memory loop (remembers across turns). OFF = a raw, stateless model with no memory — it forgets between turns."
+            className={
+              khwanOn
+                ? "rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : "rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            }
+          >
+            Khwan {khwanOn ? "ON" : "OFF"}
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            User
+          </span>
+          <input
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={userDraft}
+            onChange={(e) => setUserDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitUser();
+              }
+            }}
+            placeholder="shared brain"
+            title="Each user gets an isolated memory. Blank = one shared brain."
+            className="w-28 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:ring-slate-800"
+          />
+          <button
+            type="button"
+            onClick={commitUser}
+            disabled={userDraft.trim() === user}
+            className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Switch
+          </button>
+        </div>
       </header>
+
+      {/* Quick-switch across the brains you've used — plus the shared brain. */}
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 px-4 py-2 dark:border-slate-800">
+        <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+          Brains:
+        </span>
+        <UserChip label="shared" active={user === ""} onClick={() => switchTo("")} />
+        {usedUsers.map((u) => (
+          <UserChip
+            key={u}
+            label={u}
+            active={user === u}
+            onClick={() => switchTo(u)}
+          />
+        ))}
+        {user !== "" && !usedUsers.includes(user) && (
+          <UserChip label={user} active onClick={() => {}} />
+        )}
+      </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {messages.length === 0 && !thinking && (
-            <p className="mt-16 text-center text-sm text-slate-400 dark:text-slate-500">
-              Say hello to start the conversation.
-            </p>
+            <div className="mt-16 text-center">
+              <p className="text-sm text-slate-400 dark:text-slate-500">
+                Say hello to start the conversation.
+              </p>
+              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                {user ? (
+                  <>
+                    Chatting as <span className="font-medium">{user}</span> — an
+                    isolated brain. Switch the User to prove Khwan keeps each one
+                    separate.
+                  </>
+                ) : (
+                  <>Chatting against one shared brain. Set a User to give them a private memory.</>
+                )}
+              </p>
+            </div>
           )}
 
           {messages.map((m, i) => (
             <Bubble key={i} message={m} />
           ))}
 
-          {thinking && (
+          {steps && (
             <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-2.5 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                <span className="inline-flex gap-1">
-                  <Dot /> <Dot delay="150ms" /> <Dot delay="300ms" />
-                </span>
+              <div className="w-full max-w-md rounded-2xl rounded-bl-sm border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="mb-1 px-1 font-mono text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  {steps.naive
+                    ? "no khwan · raw model (no memory)"
+                    : "prepare → your model → record"}
+                </p>
+                {!steps.naive && (
+                  <StepRow
+                    n={1}
+                    status={steps.prepare}
+                    title="prepare"
+                    sub="Khwan builds context — memory + coherence gate. No LLM call."
+                    detail={
+                      steps.prepare === "done"
+                        ? `${steps.sources ?? 0} source${steps.sources === 1 ? "" : "s"} · coherence ${steps.coherence?.toFixed(2) ?? "—"}`
+                        : undefined
+                    }
+                  />
+                )}
+                <StepRow
+                  n={steps.naive ? 1 : 2}
+                  status={steps.model}
+                  title="your model"
+                  sub={
+                    steps.provider
+                      ? `${steps.provider} · ${steps.modelName} — your provider, your key`
+                      : "your provider, your key. Khwan never sees it."
+                  }
+                />
+                {!steps.naive && (
+                  <StepRow
+                    n={3}
+                    status={steps.record}
+                    title="record"
+                    sub="Khwan persists + learns → the next prepare is sharper."
+                  />
+                )}
               </div>
             </div>
           )}
@@ -170,7 +405,32 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
   );
 }
 
+function UserChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? "shrink-0 rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-white dark:text-slate-900"
+          : "shrink-0 rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
 function Bubble({ message }: { message: ChatMessage }) {
+  const [expanded, setExpanded] = useState(false);
   const isUser = message.role === "user";
 
   // A blocked turn: the coherence gate rejected it before any model was called.
@@ -187,6 +447,8 @@ function Bubble({ message }: { message: ChatMessage }) {
     );
   }
 
+  // Assistant answers carry the loop's telemetry — show it collapsed, expandable
+  // into the full prepare → your model → record breakdown for that turn.
   const meta: string[] = [];
   if (message.coherence !== null && message.coherence !== undefined) {
     meta.push(`coherence ${message.coherence.toFixed(2)}`);
@@ -194,6 +456,7 @@ function Bubble({ message }: { message: ChatMessage }) {
   if (message.sources !== undefined) {
     meta.push(`${message.sources} source${message.sources === 1 ? "" : "s"}`);
   }
+  const hasLoop = !isUser && message.sources !== undefined;
 
   return (
     <div className={isUser ? "flex justify-end" : "flex justify-start"}>
@@ -207,9 +470,55 @@ function Bubble({ message }: { message: ChatMessage }) {
         >
           {message.text || "(empty response)"}
         </div>
-        {!isUser && meta.length > 0 && (
-          <p className="mt-1 pl-1 text-xs text-slate-400 dark:text-slate-500">
-            {meta.join(" · ")}
+
+        {hasLoop && (
+          <>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              className="mt-1 flex items-center gap-1 pl-1 text-xs text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+            >
+              <span className="text-[9px]">{expanded ? "▾" : "▸"}</span>
+              {meta.length > 0 ? meta.join(" · ") : "how this turn worked"}
+            </button>
+
+            {expanded && (
+              <div className="mt-1.5 w-full max-w-md rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="mb-1 px-1 font-mono text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  prepare → your model → record
+                </p>
+                <StepRow
+                  n={1}
+                  status="done"
+                  title="prepare"
+                  sub="Khwan builds context — memory + coherence gate. No LLM call."
+                  detail={`${message.sources ?? 0} source${message.sources === 1 ? "" : "s"} · coherence ${message.coherence?.toFixed(2) ?? "—"} — no LLM call`}
+                />
+                <StepRow
+                  n={2}
+                  status="done"
+                  title="your model"
+                  sub={
+                    message.provider
+                      ? `${message.provider} · ${message.model} — your provider, your key`
+                      : "your provider, your key. Khwan never sees it."
+                  }
+                />
+                <StepRow
+                  n={3}
+                  status="done"
+                  title="record"
+                  sub="Khwan persisted + learned → the next prepare is sharper."
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {!isUser && message.mode === "naive" && (
+          <p className="mt-1 pl-1 text-xs text-amber-600 dark:text-amber-400">
+            naive · Khwan off — raw model, no memory (forgets between turns)
           </p>
         )}
       </div>
@@ -217,11 +526,59 @@ function Bubble({ message }: { message: ChatMessage }) {
   );
 }
 
-function Dot({ delay = "0ms" }: { delay?: string }) {
+function StepRow({
+  n,
+  status,
+  title,
+  sub,
+  detail,
+}: {
+  n: number;
+  status: StepStatus;
+  title: string;
+  sub: string;
+  detail?: string;
+}) {
+  const dim = status === "pending";
   return (
-    <span
-      className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-current"
-      style={{ animationDelay: delay }}
-    />
+    <div className="flex items-start gap-2.5 px-1 py-1.5">
+      <StepIcon status={status} n={n} />
+      <div className="min-w-0 flex-1">
+        <p
+          className={
+            dim
+              ? "text-xs font-medium text-slate-400 dark:text-slate-600"
+              : "text-xs font-medium text-slate-800 dark:text-slate-100"
+          }
+        >
+          {title}
+        </p>
+        <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+          {detail ?? sub}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function StepIcon({ status, n }: { status: StepStatus; n: number }) {
+  if (status === "done") {
+    return (
+      <span className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">
+        ✓
+      </span>
+    );
+  }
+  if (status === "active") {
+    return (
+      <span className="mt-0.5 flex h-4 w-4 flex-none animate-pulse items-center justify-center rounded-full bg-slate-800 text-[10px] font-semibold text-white dark:bg-white dark:text-slate-900">
+        {n}
+      </span>
+    );
+  }
+  return (
+    <span className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full border border-slate-300 text-[10px] font-semibold text-slate-400 dark:border-slate-700 dark:text-slate-600">
+      {n}
+    </span>
   );
 }

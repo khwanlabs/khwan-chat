@@ -4,9 +4,18 @@
 //   prepare (Khwan builds context) → your model generates → record (Khwan learns)
 //
 // GET  /api/chat  → non-secret config status for the UI (no keys).
-// POST /api/chat  → { message } ⇒ { answer, coherence, sources, blocked, reason }.
+// POST /api/chat  → { message, userId? } ⇒ a stream of newline-delimited JSON
+//   events so the UI can animate the loop live:
+//     { step: "prepare", status: "start" | "done" | "blocked", coherence?, sources?, reason? }
+//     { step: "model",   status: "start" | "done", provider?, model? }
+//     { step: "record",  status: "start" | "done" }
+//     { type: "answer", answer, coherence, sources } | { type: "blocked", reason } | { type: "error", error }
+//
+// `userId` (optional) selects an ISOLATED per-user sub-brain so the demo can
+// show Khwan remembering each user separately. Omit/blank ⇒ one shared brain.
+// Per-user sub-brains are a paid Khwan feature (the free plan returns 402).
 
-import { Khwan } from "@khwan/client";
+import { Khwan, KhwanError } from "@khwan/client";
 import { NextResponse } from "next/server";
 import { publicConfig, readConfig } from "@/lib/config";
 import { generate } from "@/lib/providers";
@@ -32,12 +41,17 @@ export async function POST(req: Request) {
     );
   }
 
-  let message: unknown;
+  let body: {
+    message?: unknown;
+    userId?: unknown;
+    khwan?: unknown;
+  };
   try {
-    ({ message } = await req.json());
+    body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
+  const { message } = body;
   if (typeof message !== "string" || !message.trim()) {
     return NextResponse.json(
       { error: "Body must be { message: string }." },
@@ -45,41 +59,122 @@ export async function POST(req: Request) {
     );
   }
 
+  // Khwan ON (default) runs the memory loop. Khwan OFF is the naive baseline: a
+  // raw, STATELESS model call — no memory layer and no history — so it visibly
+  // forgets between turns. The on/off contrast makes "Khwan remembers vs a raw
+  // model forgets" obvious.
+  const useKhwan = body.khwan !== false;
+
+  // Resolve the end-user: the browser's value wins (empty ⇒ shared brain),
+  // otherwise fall back to KHWAN_USER from .env. This is what makes each user a
+  // separate, isolated sub-brain.
+  const bodyUserId =
+    typeof body.userId === "string" ? body.userId.trim() : undefined;
+  const userId =
+    bodyUserId !== undefined ? bodyUserId || undefined : config.khwan.userId;
+
   const client = new Khwan({
     apiKey: config.khwan.apiKey,
     baseUrl: config.khwan.baseUrl,
-    userId: config.khwan.userId,
+    userId,
     core: config.khwan.core,
   });
 
-  try {
-    // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
-    const turn = await client.prepare(message.trim());
+  // Stream the loop as newline-delimited JSON so the UI can show each of the
+  // three steps as it happens: prepare (Khwan) → your model → record (Khwan).
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (obj: unknown) =>
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
 
-    // 2. Coherence gate: if the turn isn't allowed, surface the reason + stop.
-    if (!turn.allowed) {
-      return NextResponse.json({
-        blocked: true,
-        reason:
-          turn.reason ??
-          "Khwan's coherence gate blocked this turn (no reason given).",
-      });
-    }
+      try {
+        if (!useKhwan) {
+          // Naive baseline: a raw, stateless call — just this message, no memory.
+          const naive = [{ role: "user", content: message.trim() }];
+          send({
+            step: "model",
+            status: "start",
+            provider: config.model.provider,
+            model: config.model.model,
+            naive: true,
+          });
+          const answer = await generate(config.model, naive);
+          send({ step: "model", status: "done" });
+          send({ type: "answer", mode: "naive", answer });
+          return;
+        }
 
-    // 3. Call the configured provider directly with the prepared messages.
-    const answer = await generate(config.model, turn.messages);
+        // 1. Khwan builds the context (memory + constitution + coherence). No LLM.
+        send({ step: "prepare", status: "start" });
+        const turn = await client.prepare(message.trim());
 
-    // 4. Hand the answer back so Khwan can persist + learn.
-    await client.record(turn, answer);
+        // Coherence gate: if the turn isn't allowed, surface the reason + stop.
+        if (!turn.allowed) {
+          const reason =
+            turn.reason ??
+            "Khwan's coherence gate blocked this turn (no reason given).";
+          send({ step: "prepare", status: "blocked", reason });
+          send({ type: "blocked", reason });
+          controller.close();
+          return;
+        }
+        send({
+          step: "prepare",
+          status: "done",
+          coherence: turn.coherence,
+          sources: turn.sources.length,
+        });
 
-    // 5. Return the answer with the memory made visible (coherence + sources).
-    return NextResponse.json({
-      answer,
-      coherence: turn.coherence,
-      sources: turn.sources.length,
-    });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: detail }, { status: 502 });
-  }
+        // 2. Call the configured provider directly with the prepared messages.
+        send({
+          step: "model",
+          status: "start",
+          provider: config.model.provider,
+          model: config.model.model,
+        });
+        const answer = await generate(config.model, turn.messages);
+        send({ step: "model", status: "done" });
+
+        // 3. Hand the answer back so Khwan can persist + learn.
+        send({ step: "record", status: "start" });
+        await client.record(turn, answer);
+        send({ step: "record", status: "done" });
+
+        // Final: the answer, with the memory made visible (coherence + sources).
+        send({
+          type: "answer",
+          mode: "khwan",
+          answer,
+          coherence: turn.coherence,
+          sources: turn.sources.length,
+        });
+      } catch (err) {
+        // Stream already opened ⇒ status is 200; report failures as an event.
+        let error = err instanceof Error ? err.message : String(err);
+        if (err instanceof KhwanError) {
+          if (err.status === 402) {
+            error =
+              "Per-user memory limit reached for this plan. Reuse an existing " +
+              "User, upgrade for more end-users, or clear the User field to " +
+              "chat against one shared brain.";
+          } else if (err.status === 422) {
+            error = `Invalid user id "${userId ?? ""}". Use letters, numbers, and dashes.`;
+          }
+        }
+        send({ type: "error", error });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store, no-transform",
+      // Ask any proxy (e.g. nginx) not to buffer, so steps arrive live.
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

@@ -31,6 +31,10 @@ In this sample the whole loop runs **server-side**, inside the Next.js route
 keys in `.env` and out of the browser: the browser only ever sends the user's
 message and receives the answer.
 
+The route **streams** each step back as newline-delimited JSON, so the UI
+animates the loop live — you watch `prepare` (Khwan, no LLM) → `your model`
+→ `record` (Khwan learns) light up in sequence on every turn.
+
 ## Bring your own model — multiple providers
 
 Set `MODEL_PROVIDER` to one of three families. The provider adapter translates
@@ -79,7 +83,7 @@ Values are read **only on the server**; none are exposed to the browser.
 | ---------------- | :------: | ----- |
 | `KHWAN_API_KEY`  | ✅       | Your Khwan key (`kwk_...`). |
 | `KHWAN_BASE_URL` | —        | Defaults to `https://api.khwan.ai`. |
-| `KHWAN_USER`     | —        | End-user id → an isolated sub-brain (paid). Blank = one shared brain. |
+| `KHWAN_USER`     | —        | Default end-user id → an isolated sub-brain (paid). Blank = one shared brain. Editable per-session from the chat header (see below). |
 | `KHWAN_CORE`     | —        | Isolated core slug. Blank = the account's default core. |
 
 **Your model · generation**
@@ -93,6 +97,31 @@ Values are read **only on the server**; none are exposed to the browser.
 | `MODEL_MAX_TOKENS` | —        | Cap on generated tokens. Defaults to `1024`. |
 
 Restart `npm run dev` after editing `.env.local`.
+
+## Per-user memory (the multi-user demo)
+
+The chat header has a **User** field. Each distinct value is an *isolated
+sub-brain* — Khwan remembers each user separately. Type `alice`, tell it your
+name, then switch to `bob`: it won't know you. Switch back to `alice` and the
+memory is still there. Leave the field blank to chat against **one shared
+brain** (the default).
+
+Under the hood the browser sends `userId` with each message; the server passes
+it to Khwan as the end-user (`X-Khwan-User`). Changing the User clears the chat
+so the brain switch is obvious.
+
+> The free plan includes a few per-user sub-brains so you can try this out;
+> paid plans lift the cap. When you exceed the plan's limit, adding a **new**
+> User returns a 402 (the app shows a clear message) — reuse an existing User
+> or upgrade. Blank (shared brain) works on every plan.
+
+## Khwan on / off
+
+The header has a **Khwan ON/OFF** toggle. **ON** runs the memory loop. **OFF**
+is the honest baseline: a raw, stateless model call — no memory, no history — so
+it forgets between turns. Tell it your name with Khwan ON, ask for it again with
+Khwan OFF (it won't know), then turn Khwan back ON (it remembers). That's the
+whole point of the layer, in three messages.
 
 ## How it uses the library
 
