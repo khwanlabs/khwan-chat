@@ -36,14 +36,47 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
   const [user, setUser] = useState(status.userId ?? "");
   const [userDraft, setUserDraft] = useState(status.userId ?? "");
 
-  function commitUser() {
-    const next = userDraft.trim();
-    setUserDraft(next);
-    if (next === user) return;
-    setUser(next);
+  // Distinct users we've actually talked to (a turn succeeded) — each is a real
+  // sub-brain. Shown as quick-switch chips so you can see who's been used (and,
+  // on the free plan, watch the 3 slots fill up). Persisted so a reload keeps them.
+  const USED_KEY = "khwan-chat:used-users";
+  const [usedUsers, setUsedUsers] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(USED_KEY);
+      if (raw) setUsedUsers(JSON.parse(raw) as string[]);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function rememberUser(name: string) {
+    if (!name) return;
+    setUsedUsers((prev) => {
+      if (prev.includes(name)) return prev;
+      const next = [...prev, name];
+      try {
+        window.localStorage.setItem(USED_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
+  // Commit the draft as the active user. A change clears the chat so the brain
+  // switch is obvious.
+  function switchTo(next: string) {
+    const name = next.trim();
+    setUserDraft(name);
+    if (name === user) return;
+    setUser(name);
     setMessages([]);
     setError(null);
   }
+
+  const commitUser = () => switchTo(userDraft);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -97,6 +130,8 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
           sources: data.sources,
         },
       ]);
+      // A turn landed for this user ⇒ its sub-brain now exists. Track it.
+      rememberUser(user);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -129,7 +164,7 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
             {subtitle}
           </p>
         </div>
-        <label className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             User
           </span>
@@ -139,19 +174,45 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
             spellCheck={false}
             value={userDraft}
             onChange={(e) => setUserDraft(e.target.value)}
-            onBlur={commitUser}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                e.currentTarget.blur();
+                commitUser();
               }
             }}
             placeholder="shared brain"
-            title="Each user gets an isolated memory. Blank = one shared brain. (Per-user needs a paid Khwan plan.)"
-            className="w-32 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:ring-slate-800"
+            title="Each user gets an isolated memory. Blank = one shared brain."
+            className="w-28 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:ring-slate-800"
           />
-        </label>
+          <button
+            type="button"
+            onClick={commitUser}
+            disabled={userDraft.trim() === user}
+            className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Switch
+          </button>
+        </div>
       </header>
+
+      {/* Quick-switch across the brains you've used — plus the shared brain. */}
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 px-4 py-2 dark:border-slate-800">
+        <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+          Brains:
+        </span>
+        <UserChip label="shared" active={user === ""} onClick={() => switchTo("")} />
+        {usedUsers.map((u) => (
+          <UserChip
+            key={u}
+            label={u}
+            active={user === u}
+            onClick={() => switchTo(u)}
+          />
+        ))}
+        {user !== "" && !usedUsers.includes(user) && (
+          <UserChip label={user} active onClick={() => {}} />
+        )}
+      </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -217,6 +278,30 @@ export default function ChatPanel({ status }: { status: PublicConfig }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function UserChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? "shrink-0 rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-white dark:text-slate-900"
+          : "shrink-0 rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      }
+    >
+      {label}
+    </button>
   );
 }
 
